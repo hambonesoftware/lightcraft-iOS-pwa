@@ -1,0 +1,102 @@
+name: LightCraft Local — GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lightcraft-pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust and WASM target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Test PWA offline shell and storage isolation
+        run: node --test tests/pwa.test.mjs
+
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install the locked wasm-bindgen CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(awk '$0 == "name = \"wasm-bindgen\"" { getline; gsub(/version = |"/, ""); print; exit }' Cargo.lock)"
+          if [[ -z "$VERSION" ]]; then
+            echo "wasm-bindgen version missing from Cargo.lock" >&2
+            exit 1
+          fi
+          cargo install wasm-bindgen-cli --version "$VERSION" --locked
+
+      - name: Build the original LightCraft WebAssembly editor
+        run: cargo xtask web
+
+      - name: Version the PWA shell and validate the deployable bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          SITE=target/web-site
+          test -s "$SITE/index.html"
+          test -s "$SITE/lightcraft_web.js"
+          test -s "$SITE/lightcraft_web_bg.wasm"
+          test -s "$SITE/worker.js"
+          test -s "$SITE/sw.js"
+          test -s "$SITE/manifest.webmanifest"
+          test -s "$SITE/icon-256.png"
+          test -s "$SITE/icon-512.png"
+          sed -i "s/__BUILD_SHA__/${GITHUB_SHA}/g" "$SITE/sw.js"
+          test "$(grep -c "${GITHUB_SHA}" "$SITE/sw.js")" -ge 1
+          touch "$SITE/.nojekyll"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          site = Path("target/web-site")
+          manifest = json.loads((site / "manifest.webmanifest").read_text())
+          assert manifest["display"] == "standalone"
+          assert manifest["start_url"] == "./"
+          for icon in manifest["icons"]:
+              assert (site / icon["src"].removeprefix("./")).is_file()
+          html = (site / "index.html").read_text()
+          assert 'href="./manifest.webmanifest"' in html
+          assert 'register("./sw.js"' in html
+          print("PWA bundle checks passed")
+          PY
+
+      - name: Upload Pages artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: target/web-site
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Deploy the PWA
+        id: deployment
+        uses: actions/deploy-pages@v4

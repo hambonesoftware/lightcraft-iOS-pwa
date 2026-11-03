@@ -2,14 +2,31 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#1c1c1c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="LightCraft Local">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icon-256.png">
   <title>LightCraft</title>
   <link rel="icon" href="data:,">
   <meta name="description" content="LightCraft: open-source photo library and raw developer, running in your browser (WASM).">
   <style>
     :root { color-scheme: dark; }
-    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #1c1c1c; }
-    canvas#lightcraft_canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #1c1c1c; overscroll-behavior: none; }
+    body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+    canvas#lightcraft_canvas { touch-action: none; }
+    canvas#lightcraft_canvas {
+      position: absolute;
+      top: env(safe-area-inset-top, 0px);
+      right: env(safe-area-inset-right, 0px);
+      bottom: env(safe-area-inset-bottom, 0px);
+      left: env(safe-area-inset-left, 0px);
+      width: calc(100% - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+      height: calc(100% - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+      display: block;
+    }
     #lightcraft_loading {
       position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
       color: #b8b8b8; font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; pointer-events: none;
@@ -21,6 +38,16 @@
   <canvas id="lightcraft_canvas"></canvas>
   <div id="lightcraft_loading">Loading LightCraft…</div>
   <div id="lightcraft_status" aria-live="polite"></div>
+  <script>
+    // The static application shell can be available offline after its first successful install.
+    // User photo data remains in LightCraft's OPFS/IndexedDB catalog, not in the SW cache.
+    if ("serviceWorker" in navigator && window.isSecureContext) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./sw.js", { scope: "./" })
+          .catch(error => console.warn("Offline app installation unavailable:", error));
+      });
+    }
+  </script>
   <script type="module">
     import init, { start, command } from "./lightcraft_web.js";
     (async () => {
