@@ -43,6 +43,20 @@ fn window() -> Option<web_sys::Window> {
     web_sys::window()
 }
 
+/// iPadOS may advertise itself as a desktop Mac, so also inspect touch support.
+/// This only adjusts memory-heavy render concurrency, never the photo data.
+fn is_ios_device() -> bool {
+    let Ok(navigator) = js_sys::Reflect::get(&js_sys::global(), &"navigator".into()) else { return false };
+    let value = |field: &str| js_sys::Reflect::get(&navigator, &field.into()).ok();
+    let user_agent = value("userAgent").and_then(|v| v.as_string()).unwrap_or_default();
+    let platform = value("platform").and_then(|v| v.as_string()).unwrap_or_default();
+    let touch_points = value("maxTouchPoints").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    user_agent.contains("iPhone")
+        || user_agent.contains("iPad")
+        || user_agent.contains("iPod")
+        || (platform == "MacIntel" && touch_points > 1.0)
+}
+
 /// Milliseconds since navigation start.
 fn perf_now() -> f64 {
     window().and_then(|w| w.performance()).map(|p| p.now()).unwrap_or(0.0)
@@ -503,7 +517,7 @@ impl WebApp {
             );
         }
         // previews are large (≤ 2560 px, f32): keep few in a 32-bit address space
-        session.media.preview_capacity = 3;
+        session.media.preview_capacity = if is_ios_device() { 2 } else { 3 };
         // nothing is saved while the stored library couldn't be read
         let frozen = Rc::new(Cell::new(read_failed));
         let mut app = LightcraftApp::new(session, services(originals.clone(), backend.clone(), files.clone(), frozen.clone(), cc.egui_ctx.clone()))
@@ -521,7 +535,7 @@ impl WebApp {
         app.library_problem = problem;
         let n = opts.workers.unwrap_or_else(|| {
             let cores = window().map_or(1, |w| w.navigator().hardware_concurrency() as usize);
-            cores.saturating_sub(1).clamp(1, 4)
+            if is_ios_device() { 1 } else { cores.saturating_sub(1).clamp(1, 4) }
         });
         let cache = app.session.media.rendered.clone();
         let workers = (n > 0).then(|| {
