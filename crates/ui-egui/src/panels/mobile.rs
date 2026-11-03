@@ -124,10 +124,7 @@ fn header(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileState) {
 fn search_row(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileState) {
     ui.horizontal_centered(|ui| {
         let width = (ui.available_width() - 70.0).max(110.0);
-        let response = ui.add_sized(
-            [width, 44.0],
-            egui::TextEdit::singleline(&mut app.ui.search).id(search_id()).hint_text("Search photos"),
-        );
+        let response = ui.add_sized([width, 44.0], egui::TextEdit::singleline(&mut app.ui.search).id(search_id()).hint_text("Search photos"));
         if response.changed() {
             let query = app.ui.search.clone();
             if let Err(error) = app.run("library.filter", json!({ "text": query })) {
@@ -291,16 +288,10 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
         state.drawer = Drawer::Closed;
     }
 
-    egui::Panel::top("lightcraft_mobile_header")
-        .exact_size(54.0)
-        .frame(heading_frame(t.chrome))
-        .show(ui, |ui| header(app, ui, &mut state));
+    egui::Panel::top("lightcraft_mobile_header").exact_size(54.0).frame(heading_frame(t.chrome)).show(ui, |ui| header(app, ui, &mut state));
 
     if state.search_open && app.ui.view == ViewMode::PhotoGrid {
-        egui::Panel::top("lightcraft_mobile_search")
-            .exact_size(54.0)
-            .frame(heading_frame(t.chrome))
-            .show(ui, |ui| search_row(app, ui, &mut state));
+        egui::Panel::top("lightcraft_mobile_search").exact_size(54.0).frame(heading_frame(t.chrome)).show(ui, |ui| search_row(app, ui, &mut state));
     }
 
     egui::Panel::bottom("lightcraft_mobile_navigation")
@@ -316,9 +307,7 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
             .show(ui, |ui| drawer(app, ui, &mut state));
     }
 
-    egui::CentralPanel::default()
-        .frame(Frame::NONE.fill(t.canvas))
-        .show(ui, |ui| central(app, ui));
+    egui::CentralPanel::default().frame(Frame::NONE.fill(t.canvas)).show(ui, |ui| central(app, ui));
 
     ctx.data_mut(|data| data.insert_temp(state_id(), state));
 }
