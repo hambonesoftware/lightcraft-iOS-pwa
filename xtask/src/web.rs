@@ -199,6 +199,7 @@ fn mime(path: &Path) -> &'static str {
         "wasm" => "application/wasm",
         "css" => "text/css; charset=utf-8",
         "json" => "application/json",
+        "webmanifest" => "application/manifest+json",
         "png" => "image/png",
         "jpg" | "jpeg" => "image/jpeg",
         "otf" => "font/otf",
@@ -322,6 +323,7 @@ mod tests {
         assert_eq!(mime(Path::new("a/lightcraft_web_bg.wasm")), "application/wasm");
         assert_eq!(mime(Path::new("index.html")), "text/html; charset=utf-8");
         assert_eq!(mime(Path::new("worker.js")), "text/javascript; charset=utf-8");
+        assert_eq!(mime(Path::new("manifest.webmanifest")), "application/manifest+json");
         assert_eq!(mime(Path::new(CHINESE_FONT_FILE)), "font/otf");
     }
 
