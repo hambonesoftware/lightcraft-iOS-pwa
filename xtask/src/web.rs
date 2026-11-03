@@ -24,7 +24,7 @@ const CHINESE_FONT_FILE: &str = "lightcraft_zh_hans.otf";
 const CHINESE_FONT_LICENSE_FILE: &str = "OFL-noto-sans-cjk-sc.txt";
 
 /// Files copied from `apps/lightcraft-web/` into the bundle as they are.
-const STATIC_FILES: [&str; 2] = ["index.html", "worker.js"];
+const STATIC_FILES: [&str; 4] = ["index.html", "worker.js", "manifest.webmanifest", "sw.js"];
 
 /// Bundle files that get precompressed copies.
 const COMPRESSED: [&str; 4] = ["index.html", "worker.js", "lightcraft_web.js", "lightcraft_web_bg.wasm"];
@@ -137,6 +137,14 @@ pub fn run(args: &[&str]) -> Result<(), String> {
     }
     for f in STATIC_FILES {
         std::fs::copy(root().join("apps/lightcraft-web").join(f), out.join(f)).map_err(|e| format!("copy {f}: {e}"))?;
+    }
+    // Use the app's existing MIT/Apache-2.0 licensed icon assets for the PWA.
+    for (size, filename) in [(256, "icon-256.png"), (512, "icon-512.png")] {
+        let source = root()
+            .join("assets/app-icon/hicolor")
+            .join(format!("{size}x{size}/apps/ai.storyteller.lightcraft.png"));
+        std::fs::copy(&source, out.join(filename))
+            .map_err(|e| format!("{} → {}: {e}", source.display(), filename))?;
     }
     let chinese_font = copy_chinese_font(&out)?;
 
