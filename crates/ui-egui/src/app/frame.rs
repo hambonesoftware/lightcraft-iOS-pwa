@@ -442,12 +442,13 @@ impl LightcraftApp {
         }
         // Adapt to the actual window, not a device user-agent string: iPhone landscape
         // and narrow iPad windows need the same compact, photo-first workspace.
-        panels::library_problem::banner(self, ui);
         if panels::mobile::is_compact(ui.max_rect().width(), ui.max_rect().height()) {
+            panels::library_problem::banner(self, ui);
             panels::mobile::show(self, ui);
         } else {
-            // Desktop docking, tool strip and original top bar are unchanged.
+            // Preserve the desktop panel order: top bar, banner, then tools.
             panels::topbar::show(self, ui);
+            panels::library_problem::banner(self, ui);
             panels::strip::show(self, ui);
             let chrome = theme::Tokens::get(&ctx).chrome;
             egui::CentralPanel::default().frame(egui::Frame::NONE.fill(chrome)).show(ui, |ui| docking::show(self, ui));
