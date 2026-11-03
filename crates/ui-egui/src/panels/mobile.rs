@@ -43,11 +43,11 @@ fn drawer_height(remaining_height: f32, expanded: bool) -> f32 {
 }
 
 fn state_id() -> Id {
-    Id::new(STATE_KEY)
+    Id::unique(STATE_KEY)
 }
 
 fn search_id() -> Id {
-    Id::new(SEARCH_KEY)
+    Id::unique(SEARCH_KEY)
 }
 
 fn run(app: &mut LightcraftApp, ctx: &egui::Context, command: &str) {
@@ -139,7 +139,7 @@ fn search_row(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileStat
 }
 
 fn mobile_tab(ui: &mut egui::Ui, width: f32, label: &str, active: bool, enabled: bool) -> bool {
-    ui.add_enabled_sized([width, 46.0], enabled, egui::Button::new(label).selected(active)).clicked()
+    ui.add_enabled(enabled, egui::Button::new(label).selected(active).min_size(egui::vec2(width, 46.0))).clicked()
 }
 
 fn navigation(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileState) {
@@ -167,7 +167,8 @@ fn navigation(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileStat
 }
 
 fn more_action(app: &mut LightcraftApp, ui: &mut egui::Ui, label: &str, enabled: bool, command: &str) {
-    if ui.add_enabled_sized([ui.available_width().max(44.0), 44.0], enabled, egui::Button::new(label)).clicked() {
+    let width = ui.available_width().max(44.0);
+    if ui.add_enabled(enabled, egui::Button::new(label).min_size(egui::vec2(width, 44.0))).clicked() {
         run(app, ui.ctx(), command);
     }
 }
@@ -175,20 +176,21 @@ fn more_action(app: &mut LightcraftApp, ui: &mut egui::Ui, label: &str, enabled:
 fn more_actions(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileState) {
     let has_photo = app.session.active().is_some();
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-        if ui.add_enabled_sized([ui.available_width(), 44.0], has_photo, egui::Button::new("Presets")).clicked() {
+        let width = ui.available_width().max(44.0);
+        if ui.add_enabled(has_photo, egui::Button::new("Presets").min_size(egui::vec2(width, 44.0))).clicked() {
             app.ui.view = ViewMode::Detail;
             state.drawer = Drawer::Presets;
         }
-        if ui.add_enabled_sized([ui.available_width(), 44.0], has_photo, egui::Button::new("Remove")).clicked() {
+        if ui.add_enabled(has_photo, egui::Button::new("Remove").min_size(egui::vec2(width, 44.0))).clicked() {
             select_tool(app, state, RightPanel::Remove);
         }
-        if ui.add_enabled_sized([ui.available_width(), 44.0], has_photo, egui::Button::new("Info")).clicked() {
+        if ui.add_enabled(has_photo, egui::Button::new("Info").min_size(egui::vec2(width, 44.0))).clicked() {
             select_tool(app, state, RightPanel::Info);
         }
-        if ui.add_enabled_sized([ui.available_width(), 44.0], has_photo, egui::Button::new("Versions")).clicked() {
+        if ui.add_enabled(has_photo, egui::Button::new("Versions").min_size(egui::vec2(width, 44.0))).clicked() {
             select_tool(app, state, RightPanel::Versions);
         }
-        if ui.add_enabled_sized([ui.available_width(), 44.0], has_photo, egui::Button::new("History")).clicked() {
+        if ui.add_enabled(has_photo, egui::Button::new("History").min_size(egui::vec2(width, 44.0))).clicked() {
             select_tool(app, state, RightPanel::Activity);
         }
         more_action(app, ui, "Import Photos", true, "file.addPhotos");
