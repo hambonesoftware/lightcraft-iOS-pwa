@@ -51,10 +51,7 @@ fn is_ios_device() -> bool {
     let user_agent = value("userAgent").and_then(|v| v.as_string()).unwrap_or_default();
     let platform = value("platform").and_then(|v| v.as_string()).unwrap_or_default();
     let touch_points = value("maxTouchPoints").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    user_agent.contains("iPhone")
-        || user_agent.contains("iPad")
-        || user_agent.contains("iPod")
-        || (platform == "MacIntel" && touch_points > 1.0)
+    user_agent.contains("iPhone") || user_agent.contains("iPad") || user_agent.contains("iPod") || (platform == "MacIntel" && touch_points > 1.0)
 }
 
 /// Milliseconds since navigation start.
