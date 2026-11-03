@@ -95,7 +95,7 @@ fn header(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileState) {
     let has_photo = app.session.active().is_some();
     ui.horizontal_centered(|ui| {
         ui.spacing_mut().item_spacing.x = 5.0;
-        if app.ui.view != ViewMode::PhotoGrid && ui.add_sized([66.0, 44.0], egui::Button::new("Library")).clicked() {
+        if !matches!(app.ui.view, ViewMode::PhotoGrid | ViewMode::SquareGrid) && ui.add_sized([66.0, 44.0], egui::Button::new("Library")).clicked() {
             open_library(app, state);
         }
         ui.label(egui::RichText::new("LightCraft").strong().size(15.0));
@@ -227,16 +227,20 @@ fn drawer(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileState) {
             if ui.add_sized([68.0, 44.0], egui::Button::new(if state.expanded { "Smaller" } else { "Expand" })).clicked() {
                 state.expanded = !state.expanded;
             }
-            if state.drawer == Drawer::Tools && app.ui.view == ViewMode::Detail {
-                if ui.add_sized([43.0, 44.0], egui::Button::new("Fit")).clicked() {
-                    app.ui.zoom = Zoom::Fit;
-                }
-                if ui.add_sized([59.0, 44.0], egui::Button::new("Before")).clicked() {
-                    run(app, ui.ctx(), "view.beforeAfter");
-                }
-            }
         });
     });
+    // Give the preview actions their own row. A single toolbar containing
+    // title, Done, Expand, Fit and Before clips on smaller iPhone widths.
+    if state.drawer == Drawer::Tools && app.ui.view == ViewMode::Detail {
+        ui.horizontal_centered(|ui| {
+            if ui.add_sized([62.0, 44.0], egui::Button::new("Fit")).clicked() {
+                app.ui.zoom = Zoom::Fit;
+            }
+            if ui.add_sized([110.0, 44.0], egui::Button::new("Before/After")).clicked() {
+                run(app, ui.ctx(), "view.beforeAfter");
+            }
+        });
+    }
     if state.drawer == Drawer::Closed {
         return;
     }
@@ -248,7 +252,7 @@ fn drawer(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileState) {
     }
 }
 
-fn central(app: &mut LightcraftApp, ui: &mut egui::Ui) {
+fn central(app: &mut LightcraftApp, ui: &mut egui::Ui, drawer: Drawer) {
     if app.ui.slideshow.is_some() {
         super::slideshow::show(app, ui);
         return;
@@ -261,8 +265,15 @@ fn central(app: &mut LightcraftApp, ui: &mut egui::Ui) {
             // in landscape. Hide it only for this draw; preserve the user's
             // desktop setting when they return to a large window.
             let filmstrip = app.ui.filmstrip;
+            let right = app.ui.right;
             app.ui.filmstrip = false;
+            // Crop/mask overlays should not linger over the image while a
+            // different drawer is active or the controls are collapsed.
+            if drawer != Drawer::Tools {
+                app.ui.right = RightPanel::None;
+            }
             super::detail::show(app, ui);
+            app.ui.right = right;
             app.ui.filmstrip = filmstrip;
         }
         ViewMode::Compare => super::compare::show_compare(app, ui),
@@ -292,7 +303,7 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
 
     egui::Panel::top("lightcraft_mobile_header").exact_size(54.0).frame(heading_frame(t.chrome)).show(ui, |ui| header(app, ui, &mut state));
 
-    if state.search_open && app.ui.view == ViewMode::PhotoGrid {
+    if state.search_open && matches!(app.ui.view, ViewMode::PhotoGrid | ViewMode::SquareGrid) {
         egui::Panel::top("lightcraft_mobile_search").exact_size(54.0).frame(heading_frame(t.chrome)).show(ui, |ui| search_row(app, ui, &mut state));
     }
 
@@ -309,7 +320,7 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
             .show(ui, |ui| drawer(app, ui, &mut state));
     }
 
-    egui::CentralPanel::default().frame(Frame::NONE.fill(t.canvas)).show(ui, |ui| central(app, ui));
+    egui::CentralPanel::default().frame(Frame::NONE.fill(t.canvas)).show(ui, |ui| central(app, ui, state.drawer));
 
     ctx.data_mut(|data| data.insert_temp(state_id(), state));
 }
