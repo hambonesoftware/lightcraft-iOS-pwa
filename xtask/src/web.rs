@@ -140,11 +140,8 @@ pub fn run(args: &[&str]) -> Result<(), String> {
     }
     // Use the app's existing MIT/Apache-2.0 licensed icon assets for the PWA.
     for (size, filename) in [(256, "icon-256.png"), (512, "icon-512.png")] {
-        let source = root()
-            .join("assets/app-icon/hicolor")
-            .join(format!("{size}x{size}/apps/ai.storyteller.lightcraft.png"));
-        std::fs::copy(&source, out.join(filename))
-            .map_err(|e| format!("{} → {}: {e}", source.display(), filename))?;
+        let source = root().join("assets/app-icon/hicolor").join(format!("{size}x{size}/apps/ai.storyteller.lightcraft.png"));
+        std::fs::copy(&source, out.join(filename)).map_err(|e| format!("{} → {}: {e}", source.display(), filename))?;
     }
     let chinese_font = copy_chinese_font(&out)?;
 
