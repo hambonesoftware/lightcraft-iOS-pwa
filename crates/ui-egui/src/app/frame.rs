@@ -440,14 +440,19 @@ impl LightcraftApp {
             self.end_frame(&ctx, t0);
             return;
         }
-        // Order matters: earlier panels take the full edge (top bar spans the window; the tool strip,
-        // right panels and left panel run to the bottom; the bottom bar sits between them).
-        panels::topbar::show(self, ui);
-        panels::library_problem::banner(self, ui);
-        panels::strip::show(self, ui);
-        // filled: the gaps the dock leaves between its panes show chrome, not the dark clear colour
-        let chrome = theme::Tokens::get(&ctx).chrome;
-        egui::CentralPanel::default().frame(egui::Frame::NONE.fill(chrome)).show(ui, |ui| docking::show(self, ui));
+        // Adapt to the actual window, not a device user-agent string: iPhone landscape
+        // and narrow iPad windows need the same compact, photo-first workspace.
+        if panels::mobile::is_compact(ui.max_rect().width(), ui.max_rect().height()) {
+            panels::library_problem::banner(self, ui);
+            panels::mobile::show(self, ui);
+        } else {
+            // Preserve the desktop panel order: top bar, banner, then tools.
+            panels::topbar::show(self, ui);
+            panels::library_problem::banner(self, ui);
+            panels::strip::show(self, ui);
+            let chrome = theme::Tokens::get(&ctx).chrome;
+            egui::CentralPanel::default().frame(egui::Frame::NONE.fill(chrome)).show(ui, |ui| docking::show(self, ui));
+        }
         self.lights_out(&ctx);
         panels::second::show(self, &ctx);
         if notice_blocks {
