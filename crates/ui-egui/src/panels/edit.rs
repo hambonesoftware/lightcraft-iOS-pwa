@@ -35,6 +35,15 @@ use sliders::{REL_TEMP, REL_TINT, hdr_row, header_buttons, k_to_rel, profile_men
 pub use sliders::{apply_slider_out, sub_title};
 pub(crate) use sliders::{control, reload_preview_only};
 
+/// Render one develop category on mobile without changing desktop panel fold
+/// state, without replacing the engine, and without changing saved preferences.
+pub fn show_mobile(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, category: &str) {
+    let key = egui::Id::unique("mobile-edit-category");
+    ui.data_mut(|data| data.insert_temp(key, category.to_owned()));
+    show(app, ui, id);
+    ui.data_mut(|data| data.remove::<String>(key));
+}
+
 pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
     let t = Tokens::get(ui.ctx());
     let d = app.session.develop_of(id).unwrap_or_default();
@@ -56,12 +65,14 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
         wb.tint = tint;
     }
     let preview_only = app.session.catalog.photo(id).and_then(|p| p.preview_only.clone());
+    let mobile_category: Option<String> = ui.data(|data| data.get_temp(egui::Id::unique("mobile-edit-category")));
 
     if app.ui.soft_proof {
         soft_proofing(app, ui, id);
     }
     // header: Edit + Auto / B&W / HDR
     let mut reset_clicked = false;
+    if mobile_category.is_none() || mobile_category.as_deref() == Some("light") {
     let (hr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 40.0), Sense::hover());
     ui.painter().text(pos2(hr.left() + 24.0, hr.bottom() - 10.0), Align2::LEFT_CENTER, crate::i18n::tr("Edit"), t.semibold(15.0), t.text);
     egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 8, bottom: 14 }).show(ui, |ui| {
@@ -79,6 +90,7 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
         }
         reset_clicked = clicks.reset;
     });
+    }
     if let Some(why) = &preview_only {
         let reload = egui::Frame::NONE
             .inner_margin(egui::Margin { left: 24, right: 22, top: 0, bottom: 12 })
@@ -105,6 +117,9 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
         });
     }
     divider(ui);
+    // Profile/white balance are color-specific on a phone, not repeated in
+    // every correction category. Desktop keeps the complete familiar panel.
+    if mobile_category.is_none() || mobile_category.as_deref() == Some("color") {
     // profile row
     egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 14, bottom: 14 }).show(ui, |ui| {
         ui.horizontal(|ui| {
@@ -150,6 +165,7 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
         });
     }
     divider(ui);
+    }
 
     section(app, ui, &d, "light", "Light", |app, ui, d| {
         hdr_row(app, ui, d);
