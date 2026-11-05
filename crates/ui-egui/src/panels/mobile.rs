@@ -302,7 +302,8 @@ fn drawer(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileState) {
     // title, Done, Expand, Fit and Before clips on smaller iPhone widths.
     if state.drawer == Drawer::Tools && app.ui.view == ViewMode::Detail {
         ui.horizontal_centered(|ui| {
-            if app.ui.right == RightPanel::Edit && state.category == EditCategory::Light
+            if app.ui.right == RightPanel::Edit
+                && state.category == EditCategory::Light
                 && ui.add_sized([58.0, 44.0], egui::Button::new("Auto")).clicked()
             {
                 run(app, ui.ctx(), "develop.auto");
@@ -321,13 +322,10 @@ fn drawer(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileState) {
     match state.drawer {
         Drawer::Tools if app.ui.right == RightPanel::Edit => {
             if let Some(id) = app.session.active() {
-                egui::ScrollArea::vertical()
-                    .id_salt(("mobile-edit-scroll", state.category.key()))
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        ui.spacing_mut().item_spacing.y = 2.0;
-                        super::edit::show_mobile(app, ui, id, state.category.key());
-                    });
+                egui::ScrollArea::vertical().id_salt(("mobile-edit-scroll", state.category.key())).auto_shrink([false, false]).show(ui, |ui| {
+                    ui.spacing_mut().item_spacing.y = 2.0;
+                    super::edit::show_mobile(app, ui, id, state.category.key());
+                });
             }
         }
         Drawer::Tools => super::right::show(app, ui),
