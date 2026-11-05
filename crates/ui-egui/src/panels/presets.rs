@@ -362,34 +362,38 @@ pub fn show_mobile(app: &mut LightcraftApp, ui: &mut egui::Ui) {
 
     // Keep Apply and Cancel explicit. A swipe across looks should not add
     // dozens of undo steps or unintentionally overwrite the photograph.
+    let mut apply_choice: Option<(String, f64)> = None;
+    let mut cancel_preview = false;
     if let Some(selection) = pending.as_mut() {
-        ui.label(egui::RichText::new("Previewing a look — your original edits are unchanged").size(12.0).color(t.text_dim));
+        ui.label(egui::RichText::new("Previewing a look — original edits are unchanged").size(12.0).color(t.text_dim));
         ui.add_sized(
             [ui.available_width().max(120.0), 44.0],
             egui::Slider::new(&mut selection.amount, 0.0..=200.0).text("Strength").suffix("%").step_by(1.0),
         );
         ui.horizontal(|ui| {
-            let apply = ui.add_sized([112.0, 44.0], egui::Button::new("Apply Look")).clicked();
-            let cancel = ui.add_sized([90.0, 44.0], egui::Button::new("Cancel")).clicked();
-            if apply {
-                let preset_id = selection.preset_id.clone();
-                let amount = selection.amount;
-                match app.run("preset.apply", json!({"id": preset_id, "amount": amount})) {
-                    Ok(_) => {
-                        AppliedByPhoto::remember(ui.ctx(), &app.session, &preset_id);
-                        ui.data_mut(|d| d.insert_temp(egui::Id::unique("preset-amount"), AppliedPreset::new(&app.session, preset_id, amount)));
-                        pending = None;
-                        app.hover_preview = None;
-                    }
-                    Err(error) => app.toast_error(ui.ctx(), error),
-                }
-            } else if cancel {
-                pending = None;
-                app.hover_preview = None;
+            if ui.add_sized([112.0, 44.0], egui::Button::new("Apply Look")).clicked() {
+                apply_choice = Some((selection.preset_id.clone(), selection.amount));
+            }
+            if ui.add_sized([90.0, 44.0], egui::Button::new("Cancel")).clicked() {
+                cancel_preview = true;
             }
         });
     } else {
         ui.label(egui::RichText::new("Tap a look to preview it. Apply only when you like the result.").size(12.0).color(t.text_dim));
+    }
+    if let Some((preset_id, amount)) = apply_choice {
+        match app.run("preset.apply", json!({"id": preset_id, "amount": amount})) {
+            Ok(_) => {
+                AppliedByPhoto::remember(ui.ctx(), &app.session, &preset_id);
+                ui.data_mut(|d| d.insert_temp(egui::Id::unique("preset-amount"), AppliedPreset::new(&app.session, preset_id, amount)));
+                pending = None;
+                app.hover_preview = None;
+            }
+            Err(error) => app.toast_error(ui.ctx(), error),
+        }
+    } else if cancel_preview {
+        pending = None;
+        app.hover_preview = None;
     }
     ui.separator();
 
@@ -470,9 +474,12 @@ pub fn show_mobile(app: &mut LightcraftApp, ui: &mut egui::Ui) {
             settings: preset.apply(&base, selection.amount / 100.0),
         });
     }
-    ui.data_mut(|d| match pending {
-        Some(value) => d.insert_temp(key, value),
-        None => d.remove::<MobilePresetPreview>(key),
+    ui.data_mut(|d| {
+        if let Some(value) = pending {
+            d.insert_temp(key, value);
+        } else {
+            d.remove::<MobilePresetPreview>(key);
+        }
     });
 }
 
