@@ -35,6 +35,15 @@ use sliders::{REL_TEMP, REL_TINT, hdr_row, header_buttons, k_to_rel, profile_men
 pub use sliders::{apply_slider_out, sub_title};
 pub(crate) use sliders::{control, reload_preview_only};
 
+/// Render one develop category on mobile without changing desktop panel fold
+/// state, without replacing the engine, and without changing saved preferences.
+pub fn show_mobile(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, category: &str) {
+    let key = egui::Id::unique("mobile-edit-category");
+    ui.data_mut(|data| data.insert_temp(key, category.to_owned()));
+    show(app, ui, id);
+    ui.data_mut(|data| data.remove::<String>(key));
+}
+
 pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
     let t = Tokens::get(ui.ctx());
     let d = app.session.develop_of(id).unwrap_or_default();
@@ -56,29 +65,32 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
         wb.tint = tint;
     }
     let preview_only = app.session.catalog.photo(id).and_then(|p| p.preview_only.clone());
+    let mobile_category: Option<String> = ui.data(|data| data.get_temp(egui::Id::unique("mobile-edit-category")));
 
     if app.ui.soft_proof {
         soft_proofing(app, ui, id);
     }
     // header: Edit + Auto / B&W / HDR
     let mut reset_clicked = false;
-    let (hr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 40.0), Sense::hover());
-    ui.painter().text(pos2(hr.left() + 24.0, hr.bottom() - 10.0), Align2::LEFT_CENTER, crate::i18n::tr("Edit"), t.semibold(15.0), t.text);
-    egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 8, bottom: 14 }).show(ui, |ui| {
-        let tip = reset_tip(&app.ui.settings.keymap, ui.ctx().os() == egui::os::OperatingSystem::Mac);
-        let clicks = header_buttons(ui, crate::is_bw(&d), d.hdr.enabled, &tip);
-        if clicks.auto {
-            let _ = app.run("develop.auto", json!({}));
-            app.toast(ui.ctx(), crate::i18n::tr("Auto settings applied"));
-        }
-        if clicks.bw {
-            let _ = app.run("develop.treatment", json!({}));
-        }
-        if clicks.hdr {
-            let _ = app.run("develop.hdr", json!({"enabled": !d.hdr.enabled}));
-        }
-        reset_clicked = clicks.reset;
-    });
+    if mobile_category.is_none() || mobile_category.as_deref() == Some("light") {
+        let (hr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 40.0), Sense::hover());
+        ui.painter().text(pos2(hr.left() + 24.0, hr.bottom() - 10.0), Align2::LEFT_CENTER, crate::i18n::tr("Edit"), t.semibold(15.0), t.text);
+        egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 8, bottom: 14 }).show(ui, |ui| {
+            let tip = reset_tip(&app.ui.settings.keymap, ui.ctx().os() == egui::os::OperatingSystem::Mac);
+            let clicks = header_buttons(ui, crate::is_bw(&d), d.hdr.enabled, &tip);
+            if clicks.auto {
+                let _ = app.run("develop.auto", json!({}));
+                app.toast(ui.ctx(), crate::i18n::tr("Auto settings applied"));
+            }
+            if clicks.bw {
+                let _ = app.run("develop.treatment", json!({}));
+            }
+            if clicks.hdr {
+                let _ = app.run("develop.hdr", json!({"enabled": !d.hdr.enabled}));
+            }
+            reset_clicked = clicks.reset;
+        });
+    }
     if let Some(why) = &preview_only {
         let reload = egui::Frame::NONE
             .inner_margin(egui::Margin { left: 24, right: 22, top: 0, bottom: 12 })
@@ -105,51 +117,59 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
         });
     }
     divider(ui);
-    // profile row
-    egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 14, bottom: 14 }).show(ui, |ui| {
-        ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(crate::i18n::tr("Profile")).font(t.font(13.0)).color(t.text_dim));
-            let name = app.session.profile_info(&d.profile.id).map(|(name, _)| name).unwrap_or("Color");
-            // a long name is cut short before Browse Profiles: a wider row would widen the whole panel's
-            // content, and the sliders below would run past its edge
-            let max = ui.available_width() - 28.0 - ui.spacing().item_spacing.x;
-            let r = crate::widgets::dropdown_within(ui, "profile", crate::i18n::profile_label(&d.profile.id, name), t.font(15.0), t.text_label, max);
-            let below = r.rect.bottom();
-            egui::Popup::menu(&r).show(|ui| profile_menu(app, ui, &d, below));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if crate::widgets::icon_button(
-                    ui,
-                    "profileBrowser",
-                    Icon::ProfileGrid,
-                    vec2(28.0, 28.0),
-                    false,
-                    true,
-                    crate::i18n::tr("Browse Profiles"),
-                )
-                .clicked()
-                {
-                    let _ = app.run("panel.profiles", json!({}));
-                }
+    // Profile/white balance are color-specific on a phone, not repeated in
+    // every correction category. Desktop keeps the complete familiar panel.
+    if mobile_category.is_none() || mobile_category.as_deref() == Some("color") {
+        // profile row
+        egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 14, bottom: 14 }).show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(crate::i18n::tr("Profile")).font(t.font(13.0)).color(t.text_dim));
+                let name = app.session.profile_info(&d.profile.id).map(|(name, _)| name).unwrap_or("Color");
+                // a long name is cut short before Browse Profiles: a wider row would widen the whole panel's
+                // content, and the sliders below would run past its edge
+                let max = ui.available_width() - 28.0 - ui.spacing().item_spacing.x;
+                let r =
+                    crate::widgets::dropdown_within(ui, "profile", crate::i18n::profile_label(&d.profile.id, name), t.font(15.0), t.text_label, max);
+                let below = r.rect.bottom();
+                egui::Popup::menu(&r).show(|ui| profile_menu(app, ui, &d, below));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if crate::widgets::icon_button(
+                        ui,
+                        "profileBrowser",
+                        Icon::ProfileGrid,
+                        vec2(28.0, 28.0),
+                        false,
+                        true,
+                        crate::i18n::tr("Browse Profiles"),
+                    )
+                    .clicked()
+                    {
+                        let _ = app.run("panel.profiles", json!({}));
+                    }
+                });
             });
         });
-    });
-    if d.profile.id != "lc.color" {
-        control(app, ui, &d, "profile.amount", true);
-        ui.add_space(6.0);
+        if d.profile.id != "lc.color" {
+            control(app, ui, &d, "profile.amount", true);
+            ui.add_space(6.0);
+        }
+        // a raw carrying its own local tone mapping (Apple ProRAW's gain table map): off renders it as
+        // Lightroom Classic does, on as the camera does
+        if app.session.source_info(id).local_tone.is_some() {
+            egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 0, bottom: 10 }).show(ui, |ui| {
+                let mut on = d.profile.camera_local_tone;
+                let r = ui.checkbox(&mut on, crate::i18n::tr("Camera local tone mapping"));
+                crate::widgets::register(ui, "check:profile.cameraLocalTone", r.rect);
+                if r.on_hover_text(crate::i18n::tr("Apply the local tone mapping stored in the raw (Apple ProRAW), as the camera renders it"))
+                    .changed()
+                {
+                    let _ =
+                        app.run("develop.merge", json!({"settings": {"profile": {"camera_local_tone": on}}, "label": "Camera Local Tone Mapping"}));
+                }
+            });
+        }
+        divider(ui);
     }
-    // a raw carrying its own local tone mapping (Apple ProRAW's gain table map): off renders it as
-    // Lightroom Classic does, on as the camera does
-    if app.session.source_info(id).local_tone.is_some() {
-        egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 0, bottom: 10 }).show(ui, |ui| {
-            let mut on = d.profile.camera_local_tone;
-            let r = ui.checkbox(&mut on, crate::i18n::tr("Camera local tone mapping"));
-            crate::widgets::register(ui, "check:profile.cameraLocalTone", r.rect);
-            if r.on_hover_text(crate::i18n::tr("Apply the local tone mapping stored in the raw (Apple ProRAW), as the camera renders it")).changed() {
-                let _ = app.run("develop.merge", json!({"settings": {"profile": {"camera_local_tone": on}}, "label": "Camera Local Tone Mapping"}));
-            }
-        });
-    }
-    divider(ui);
 
     section(app, ui, &d, "light", "Light", |app, ui, d| {
         hdr_row(app, ui, d);

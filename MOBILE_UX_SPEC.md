@@ -1,6 +1,6 @@
 # LightCraft Local: mobile UX architecture and acceptance specification
 
-**Status:** working implementation, milestone M2 (responsive workspace).  
+**Status:** M2 responsive workspace plus a new correction-category and visual-preset implementation; physical iOS acceptance is still required.  
 **Scope:** actual LightCraft Rust/egui WebAssembly editor, catalog, render engine and OPFS/IndexedDB library.  
 **Goal:** make mobile editing feel intentionally designed for iPhone and narrow iPad windows without hiding or breaking professional tools.
 
@@ -77,6 +77,20 @@ These are **logical points**, not device pixels. This prevents treating all iPad
 | Export to iOS file download | Header Export; More | dialog.export |
 | Local library backup / restore | More | Existing backup commands |
 | Compare, Survey, Reference, People | Existing underlying state | Render retained; menu exposure and touch usability are follow-up work |
+
+## Lightroom-style correction and filter update
+
+- Mobile editing navigation is horizontally scrollable; Library stays pinned while Presets, Light, Color, Effects, Detail, Optics, Calibrate, Crop, Mask and More can be reached with a swipe.
+- Light, Color, Effects, Detail, Optics and Calibration render their actual existing Rust develop controls as individual categories, without changing the desktop fold or order.
+- Light exposes one-tap Auto; photo Fit and Before/After remain accessible above corrections.
+- The mobile presets view uses a two-column gallery with real photo-specific variant renders rather than a mouse-hover-only list.
+- A tap **previews only**: the original catalog and edit history are unchanged until **Apply Look**. The strength slider previews 0–200%, and Cancel discards it. Presets are still grouped with Favorites first.
+- Only thumbnails in the visible gallery rows are requested, helping avoid an unbounded memory load on mobile.
+- Desktop uses the original preset browser and existing develop panel unchanged.
+
+### Remaining device validation
+
+Check low-memory iPhone photo editing and scrolling performance; portrait and landscape tool reachability; accurate preset thumbnail/large-image preview parity; switching photos during an uncommitted look; and output export matching the applied look. Fine-tuning the lower-level slider touch handling, mask handles, and iOS keyboard remains a separate quality pass.
 
 ## Interaction test matrix
 

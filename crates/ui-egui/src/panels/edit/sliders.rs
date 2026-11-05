@@ -184,6 +184,15 @@ pub(super) fn section(
     title: &str,
     body: impl FnOnce(&mut LightcraftApp, &mut egui::Ui, &DevelopSettings),
 ) {
+    // The compact workspace presents exactly one Lightroom-style category at a
+    // time. The shared develop controls still call the original edit commands.
+    let mobile_category: Option<String> = ui.data(|data| data.get_temp(egui::Id::unique("mobile-edit-category")));
+    if let Some(focused) = mobile_category {
+        if focused == id {
+            body(app, ui, d);
+        }
+        return;
+    }
     let open = app.ui.section_open(id);
     let (resp, toggled) = section_header(ui, id, title, open, Some(d.section_enabled(id)));
     if let Some(on) = toggled {
