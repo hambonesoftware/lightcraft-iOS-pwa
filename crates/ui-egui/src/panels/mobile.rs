@@ -415,6 +415,22 @@ mod tests {
     use super::{drawer_height, is_compact};
 
     #[test]
+    fn correction_categories_have_unique_engine_sections() {
+        use super::EditCategory;
+        let categories = EditCategory::ALL;
+        assert_eq!(categories.len(), 6);
+        let mut keys = std::collections::HashSet::new();
+        for category in categories {
+            assert!(keys.insert(category.key()), "duplicate correction category");
+            assert!(!category.label().is_empty());
+        }
+        assert_eq!(EditCategory::Light.key(), "light");
+        assert_eq!(EditCategory::Color.key(), "color");
+        assert_eq!(EditCategory::Effects.key(), "effects");
+        assert_eq!(EditCategory::Optics.key(), "optics");
+    }
+
+    #[test]
     fn phone_portrait_and_landscape_use_compact_tools() {
         assert!(is_compact(393.0, 852.0));
         assert!(is_compact(852.0, 393.0));
