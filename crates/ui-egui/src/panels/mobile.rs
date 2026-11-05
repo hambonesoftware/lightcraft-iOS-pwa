@@ -20,11 +20,50 @@ enum Drawer {
     More,
 }
 
+/// Mobile correction groups map directly to existing develop sections.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum EditCategory {
+    #[default]
+    Light,
+    Color,
+    Effects,
+    Detail,
+    Optics,
+    Calibration,
+}
+
+impl EditCategory {
+    const ALL: [Self; 6] = [Self::Light, Self::Color, Self::Effects, Self::Detail, Self::Optics, Self::Calibration];
+
+    fn key(self) -> &'static str {
+        match self {
+            Self::Light => "light",
+            Self::Color => "color",
+            Self::Effects => "effects",
+            Self::Detail => "detail",
+            Self::Optics => "optics",
+            Self::Calibration => "calibration",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Light => "Light",
+            Self::Color => "Color",
+            Self::Effects => "Effects",
+            Self::Detail => "Detail",
+            Self::Optics => "Optics",
+            Self::Calibration => "Calibrate",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 struct MobileState {
     drawer: Drawer,
     expanded: bool,
     search_open: bool,
+    category: EditCategory,
 }
 
 const STATE_KEY: &str = "lightcraft-mobile-workspace";
@@ -142,27 +181,56 @@ fn mobile_tab(ui: &mut egui::Ui, width: f32, label: &str, active: bool, enabled:
     ui.add_enabled(enabled, egui::Button::new(label).selected(active).min_size(egui::vec2(width, 46.0))).clicked()
 }
 
+fn correction_category(app: &mut LightcraftApp, state: &mut MobileState, category: EditCategory) {
+    if app.session.active().is_none() {
+        open_library(app, state);
+        return;
+    }
+    app.ui.view = ViewMode::Detail;
+    app.ui.right = RightPanel::Edit;
+    if state.category == category && state.drawer == Drawer::Tools {
+        state.drawer = Drawer::Closed;
+        app.ui.right = RightPanel::None;
+    } else {
+        state.category = category;
+        state.drawer = Drawer::Tools;
+    }
+}
+
 fn navigation(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileState) {
     let has_photo = app.session.active().is_some();
-    let is_detail = app.ui.view == ViewMode::Detail;
+    let detail = app.ui.view == ViewMode::Detail;
+    // Library remains reachable while the correction categories scroll under
+    // the thumb. No fixed five-column layout or horizontally squeezed text.
     ui.horizontal_centered(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
-        let width = ((ui.available_width() - 16.0) / 5.0).max(42.0);
-        if mobile_tab(ui, width, "Library", !is_detail, true) {
+        if mobile_tab(ui, 72.0, "Library", !detail, true) {
             open_library(app, state);
         }
-        if mobile_tab(ui, width, "Edit", is_detail && state.drawer == Drawer::Tools && app.ui.right == RightPanel::Edit, has_photo) {
-            select_tool(app, state, RightPanel::Edit);
-        }
-        if mobile_tab(ui, width, "Crop", is_detail && state.drawer == Drawer::Tools && app.ui.right == RightPanel::Crop, has_photo) {
-            select_tool(app, state, RightPanel::Crop);
-        }
-        if mobile_tab(ui, width, "Mask", is_detail && state.drawer == Drawer::Tools && app.ui.right == RightPanel::Masking, has_photo) {
-            select_tool(app, state, RightPanel::Masking);
-        }
-        if mobile_tab(ui, width, "More", state.drawer == Drawer::More, true) {
-            state.drawer = if state.drawer == Drawer::More { Drawer::Closed } else { Drawer::More };
-        }
+        egui::ScrollArea::horizontal().id_salt("mobile-correction-navigation").auto_shrink([false, false]).show(ui, |ui| {
+            ui.horizontal_centered(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                if mobile_tab(ui, 80.0, "Presets", detail && state.drawer == Drawer::Presets, has_photo) {
+                    app.ui.view = ViewMode::Detail;
+                    state.drawer = if state.drawer == Drawer::Presets { Drawer::Closed } else { Drawer::Presets };
+                }
+                for category in EditCategory::ALL {
+                    let selected = detail && state.drawer == Drawer::Tools && app.ui.right == RightPanel::Edit && state.category == category;
+                    if mobile_tab(ui, 79.0, category.label(), selected, has_photo) {
+                        correction_category(app, state, category);
+                    }
+                }
+                if mobile_tab(ui, 72.0, "Crop", detail && state.drawer == Drawer::Tools && app.ui.right == RightPanel::Crop, has_photo) {
+                    select_tool(app, state, RightPanel::Crop);
+                }
+                if mobile_tab(ui, 72.0, "Mask", detail && state.drawer == Drawer::Tools && app.ui.right == RightPanel::Masking, has_photo) {
+                    select_tool(app, state, RightPanel::Masking);
+                }
+                if mobile_tab(ui, 72.0, "More", state.drawer == Drawer::More, true) {
+                    state.drawer = if state.drawer == Drawer::More { Drawer::Closed } else { Drawer::More };
+                }
+            });
+        });
     });
 }
 
@@ -204,7 +272,8 @@ fn drawer(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileState) {
     let title = match state.drawer {
         Drawer::Closed => return,
         Drawer::Tools => match app.ui.right {
-            RightPanel::Edit | RightPanel::Profiles => "Edit",
+            RightPanel::Edit => state.category.label(),
+            RightPanel::Profiles => "Profiles",
             RightPanel::Crop => "Crop & Rotate",
             RightPanel::Masking => "Mask",
             RightPanel::Remove => "Remove",
@@ -233,7 +302,12 @@ fn drawer(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileState) {
     // title, Done, Expand, Fit and Before clips on smaller iPhone widths.
     if state.drawer == Drawer::Tools && app.ui.view == ViewMode::Detail {
         ui.horizontal_centered(|ui| {
-            if ui.add_sized([62.0, 44.0], egui::Button::new("Fit")).clicked() {
+            if app.ui.right == RightPanel::Edit && state.category == EditCategory::Light
+                && ui.add_sized([58.0, 44.0], egui::Button::new("Auto")).clicked()
+            {
+                run(app, ui.ctx(), "develop.auto");
+            }
+            if ui.add_sized([56.0, 44.0], egui::Button::new("Fit")).clicked() {
                 app.ui.zoom = Zoom::Fit;
             }
             if ui.add_sized([110.0, 44.0], egui::Button::new("Before/After")).clicked() {
@@ -245,8 +319,19 @@ fn drawer(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileState) {
         return;
     }
     match state.drawer {
+        Drawer::Tools if app.ui.right == RightPanel::Edit => {
+            if let Some(id) = app.session.active() {
+                egui::ScrollArea::vertical()
+                    .id_salt(("mobile-edit-scroll", state.category.key()))
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        ui.spacing_mut().item_spacing.y = 2.0;
+                        super::edit::show_mobile(app, ui, id, state.category.key());
+                    });
+            }
+        }
         Drawer::Tools => super::right::show(app, ui),
-        Drawer::Presets => super::presets::show(app, ui),
+        Drawer::Presets => super::presets::show_mobile(app, ui),
         Drawer::More => more_actions(app, ui, state),
         Drawer::Closed => {}
     }
