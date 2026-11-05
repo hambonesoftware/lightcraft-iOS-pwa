@@ -435,7 +435,12 @@ pub fn show_mobile(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                         register(ui, format!("mobilePreset:{}", preset.id), rect);
                         crate::widgets::announce(&response, crate::i18n::builtin_label(&preset.name, preset.builtin).to_string());
                         ui.painter().rect_filled(rect, 6.0, if selected { t.tool_active } else { t.canvas });
-                        ui.painter().rect_stroke(rect, 6.0, egui::Stroke::new(if selected { 2.0 } else { 1.0 }, if selected { t.accent } else { t.divider }), egui::StrokeKind::Inside);
+                        ui.painter().rect_stroke(
+                            rect,
+                            6.0,
+                            egui::Stroke::new(if selected { 2.0 } else { 1.0 }, if selected { t.accent } else { t.divider }),
+                            egui::StrokeKind::Inside,
+                        );
                         let image = Rect::from_min_max(rect.min + vec2(5.0, 5.0), pos2(rect.right() - 5.0, rect.bottom() - 32.0));
                         ui.painter().rect_filled(image, 4.0, t.chrome);
                         let look = preset.apply(&base, 1.0);
