@@ -325,6 +325,157 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     });
 }
 
+/// A tap on a mobile look is deliberately only a live preview: the actual
+/// non-destructive develop history changes only after the user taps Apply.
+#[derive(Clone)]
+struct MobilePresetPreview {
+    photo: lightcraft_catalog::PhotoId,
+    preset_id: String,
+    amount: f64,
+}
+
+const MOBILE_PRESET_PREVIEW: &str = "mobile-preset-preview";
+
+/// Two-column, touch-first filter gallery using the same variant renderer as
+/// LightCraft's desktop preset thumbnails. Previewing never commits a change.
+pub fn show_mobile(app: &mut LightcraftApp, ui: &mut egui::Ui) {
+    let Some(photo) = app.session.active() else {
+        ui.label(crate::i18n::tr("Choose a photo before selecting a preset."));
+        return;
+    };
+    let key = egui::Id::unique(MOBILE_PRESET_PREVIEW);
+    let mut pending: Option<MobilePresetPreview> = ui.data(|d| d.get_temp(key));
+    if pending.as_ref().is_some_and(|p| p.photo != photo || !app.session.presets.iter().any(|pr| pr.id == p.preset_id)) {
+        pending = None;
+    }
+    let t = Tokens::get(ui.ctx());
+    let base = app.session.develop_of(photo).unwrap_or_default();
+
+    ui.horizontal_centered(|ui| {
+        ui.label(egui::RichText::new("Looks & Presets").strong().size(14.0));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.add_sized([76.0, 44.0], egui::Button::new("Create")).clicked() {
+                app.ui.dialog = Some(crate::state::Dialog::create_preset());
+            }
+        });
+    });
+
+    // Keep Apply and Cancel explicit. A swipe across looks should not add
+    // dozens of undo steps or unintentionally overwrite the photograph.
+    if let Some(selection) = pending.as_mut() {
+        ui.label(egui::RichText::new("Previewing a look — your original edits are unchanged").size(12.0).color(t.text_dim));
+        ui.add_sized(
+            [ui.available_width().max(120.0), 44.0],
+            egui::Slider::new(&mut selection.amount, 0.0..=200.0).text("Strength").suffix("%").step_by(1.0),
+        );
+        ui.horizontal(|ui| {
+            let apply = ui.add_sized([112.0, 44.0], egui::Button::new("Apply Look")).clicked();
+            let cancel = ui.add_sized([90.0, 44.0], egui::Button::new("Cancel")).clicked();
+            if apply {
+                let preset_id = selection.preset_id.clone();
+                let amount = selection.amount;
+                match app.run("preset.apply", json!({"id": preset_id, "amount": amount})) {
+                    Ok(_) => {
+                        AppliedByPhoto::remember(ui.ctx(), &app.session, &preset_id);
+                        ui.data_mut(|d| d.insert_temp(egui::Id::unique("preset-amount"), AppliedPreset::new(&app.session, preset_id, amount)));
+                        pending = None;
+                        app.hover_preview = None;
+                    }
+                    Err(error) => app.toast_error(ui.ctx(), error),
+                }
+            } else if cancel {
+                pending = None;
+                app.hover_preview = None;
+            }
+        });
+    } else {
+        ui.label(egui::RichText::new("Tap a look to preview it. Apply only when you like the result.").size(12.0).color(t.text_dim));
+    }
+    ui.separator();
+
+    let groups = grouped(ui.ctx(), &app.session.presets);
+    egui::ScrollArea::vertical().id_salt("mobile-preset-gallery").auto_shrink([false, false]).show(ui, |ui| {
+        ui.spacing_mut().item_spacing.y = 0.0;
+        const TILE_H: f32 = 136.0;
+        const ROW_H: f32 = 144.0;
+        const GAP: f32 = 8.0;
+        // Responsive sizing makes room for two cards without horizontal
+        // clipping even on the narrowest supported iPhone.
+        let tile_w = ((ui.available_width() - GAP) / 2.0).max(72.0);
+        let visible = ui.clip_rect().expand(ROW_H);
+        for group in groups.iter() {
+            let (header, _) = ui.allocate_exact_size(vec2(ui.available_width(), 32.0), Sense::hover());
+            ui.painter().text(
+                pos2(header.left() + 8.0, header.center().y),
+                Align2::LEFT_CENTER,
+                crate::i18n::builtin_label(&group.name, group.builtin),
+                t.semibold(13.0),
+                t.text_label,
+            );
+            let rows = group.items.len().div_ceil(2);
+            let (first, end) = rows_in_view(ui.cursor().top(), ROW_H, rows, visible);
+            if first > 0 {
+                ui.add_space(first as f32 * ROW_H);
+            }
+            for row in first..end {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = GAP;
+                    for col in 0..2 {
+                        let Some(&index) = group.items.get(row * 2 + col) else {
+                            ui.add_space(tile_w);
+                            continue;
+                        };
+                        let Some(preset) = app.session.presets.get(index).cloned() else { continue };
+                        let selected = pending.as_ref().is_some_and(|p| p.preset_id == preset.id);
+                        let (rect, response) = ui.allocate_exact_size(vec2(tile_w, TILE_H), Sense::click());
+                        register(ui, format!("mobilePreset:{}", preset.id), rect);
+                        crate::widgets::announce(&response, crate::i18n::builtin_label(&preset.name, preset.builtin).to_string());
+                        ui.painter().rect_filled(rect, 6.0, if selected { t.tool_active } else { t.canvas });
+                        ui.painter().rect_stroke(rect, 6.0, egui::Stroke::new(if selected { 2.0 } else { 1.0 }, if selected { t.accent } else { t.divider }), egui::StrokeKind::Inside);
+                        let image = Rect::from_min_max(rect.min + vec2(5.0, 5.0), pos2(rect.right() - 5.0, rect.bottom() - 32.0));
+                        ui.painter().rect_filled(image, 4.0, t.chrome);
+                        let look = preset.apply(&base, 1.0);
+                        if let Some(job) = app.session.variant_job(photo, &look, THUMB_EDGE)
+                            && let Some(texture) = app.renderer.variant(job)
+                        {
+                            ui.painter().image(texture.tex.id(), image, cover_uv(image, texture.size), Color32::WHITE);
+                        }
+                        ui.painter().text(
+                            pos2(rect.left() + 8.0, rect.bottom() - 16.0),
+                            Align2::LEFT_CENTER,
+                            crate::i18n::builtin_label(&preset.name, preset.builtin),
+                            t.font(12.0),
+                            t.text_label,
+                        );
+                        if response.clicked() {
+                            pending = Some(MobilePresetPreview { photo, preset_id: preset.id.clone(), amount: 100.0 });
+                        }
+                    }
+                });
+                ui.add_space(ROW_H - TILE_H);
+            }
+            if end < rows {
+                ui.add_space((rows - end) as f32 * ROW_H);
+            }
+        }
+    });
+
+    // The central image is painted AFTER this panel, so the user sees the live
+    // preview on the same pass. Neither selection nor amount touches the catalog.
+    if let Some(selection) = pending.as_ref()
+        && let Some(preset) = app.session.presets.iter().find(|pr| pr.id == selection.preset_id)
+    {
+        app.hover_preview = Some(HoverPreview {
+            label: format!("Preview: {}", crate::i18n::builtin_label(&preset.name, preset.builtin)),
+            settings: preset.apply(&base, selection.amount / 100.0),
+        });
+    }
+    ui.data_mut(|d| match pending {
+        Some(value) => d.insert_temp(key, value),
+        None => d.remove::<MobilePresetPreview>(key),
+    });
+}
+
 /// A preset group as the panel lists it: indices into the session's presets.
 struct Group {
     name: String,
