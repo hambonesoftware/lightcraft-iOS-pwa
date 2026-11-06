@@ -373,7 +373,7 @@ pub fn show_mobile(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     }
     group_index = group_index.min(groups.len() - 1);
 
-    ui.horizontal_centered(|ui| {
+    ui.horizontal(|ui| {
         ui.label(egui::RichText::new("Explore looks").strong().size(13.0));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui.add_sized([67.0, 36.0], egui::Button::new("Create").frame(false)).clicked() {
@@ -394,7 +394,7 @@ pub fn show_mobile(app: &mut LightcraftApp, ui: &mut egui::Ui) {
             [ui.available_width().max(100.0), 42.0],
             egui::Slider::new(&mut selection.amount, 0.0..=200.0).text("Strength").suffix("%").step_by(1.0),
         );
-        ui.horizontal_centered(|ui| {
+        ui.horizontal(|ui| {
             if ui.add_sized([118.0, 44.0], egui::Button::new("Apply Look")).clicked() {
                 apply_choice = Some((selection.preset_id.clone(), selection.amount));
             }
@@ -406,7 +406,7 @@ pub fn show_mobile(app: &mut LightcraftApp, ui: &mut egui::Ui) {
         // The group picker disappears while adjusting a preview, making room
         // for the photo-specific intensity slider and action buttons.
         egui::ScrollArea::horizontal().id_salt("mobile-looks-groups").show(ui, |ui| {
-            ui.horizontal_centered(|ui| {
+            ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
                 for (index, group) in groups.iter().enumerate() {
                     let label = crate::i18n::builtin_label(&group.name, group.builtin);
@@ -432,13 +432,13 @@ pub fn show_mobile(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     let start = page * PER_PAGE;
     let end = (start + PER_PAGE).min(items.len());
 
-    ui.horizontal_centered(|ui| {
+    ui.horizontal(|ui| {
         if total_pages > 1 && ui.add_sized([38.0, 44.0], egui::Button::new("‹").frame(false)).clicked() {
             page = page.saturating_sub(1);
         }
         let available = ui.available_width() - if total_pages > 1 { 38.0 } else { 0.0 };
         egui::ScrollArea::horizontal().id_salt(("mobile-looks-strip", group_index, page)).max_width(available.max(TILE_W)).show(ui, |ui| {
-            ui.horizontal_centered(|ui| {
+            ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 8.0;
                 for &index in &items[start..end] {
                     let Some(preset) = app.session.presets.get(index).cloned() else { continue };
