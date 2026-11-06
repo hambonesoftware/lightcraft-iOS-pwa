@@ -96,6 +96,15 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
   async function checkStorageDurability() {
     const status = el("storage_status");
     if (!status) return;
+    const engine = await call("web.stats");
+    if (engine?.storage === "native") {
+      status.textContent = "Native iPhone Documents storage active. Your imported originals and edits are outside browser storage.";
+      const description = document.querySelector(".privacy-caption");
+      if (description) {
+        description.textContent = "Photos and edits are kept in the installed LightCraft app's Documents folder, not in Safari or browser storage. Deleting the app can delete its documents. Keep another backup.";
+      }
+      return;
+    }
     const storage = navigator.storage;
     if (!storage || typeof storage.persisted !== "function") {
       status.textContent = "This device does not report storage durability. Keep a separate photo backup.";
