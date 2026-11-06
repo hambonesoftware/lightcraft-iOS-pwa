@@ -190,7 +190,17 @@ pub async fn backup(files: Files, backend: Backend, names: HashMap<String, Strin
     opts.set_type("application/zip");
     let blob = web_sys::Blob::new_with_u8_array_sequence_and_options(&parts, &opts).map_err(|e| format!("{e:?}"))?;
     let day: String = String::from(js_sys::Date::new_0().to_iso_string()).chars().take(10).collect();
-    download_blob(&format!("lightcraft-library-backup-{day}.zip"), &blob)?;
+    let backup_name = format!("lightcraft-library-backup-{day}.zip");
+    if backend.kind() == "native" {
+        // The native backup is not a WebKit download: keep the verified ZIP
+        // in Documents/LightCraft/backups, visible through iOS Files.
+        let buf = JsFuture::from(blob.array_buffer()).await.map_err(|e| format!("{e:?}"))?;
+        let data = Uint8Array::new(&buf).to_vec();
+        backend.write(&format!("backups/{backup_name}"), &data).await
+            .map_err(|e| format!("saving native backup: {e}"))?;
+    } else {
+        download_blob(&backup_name, &blob)?;
+    }
     Ok((originals, bytes + tail.len() as f64))
 }
 
@@ -237,10 +247,12 @@ pub async fn restore(file: web_sys::File, backend: Backend) -> Result<String, St
 
 /// File ▸ Restore Library from Backup…: confirm, pick the zip, restore, reload.
 pub fn pick_and_restore(backend: Backend, before_reload: impl FnOnce() + 'static) {
-    let ok = confirm(
-        "Restore a LightCraft library backup?\n\nThe backup becomes the library in this browser and the page reloads. \
-         The current library is not deleted: it stays in browser storage.",
-    );
+    let message = if backend.kind() == "native" {
+        "Restore a LightCraft library backup?\\n\\nThe backup becomes your installed iOS app library and the app reloads. Your current library remains in Documents."
+    } else {
+        "Restore a LightCraft library backup?\\n\\nThe backup becomes the library in this browser and the page reloads. The current library remains in browser storage."
+    };
+    let ok = confirm(message);
     if !ok {
         return;
     }
