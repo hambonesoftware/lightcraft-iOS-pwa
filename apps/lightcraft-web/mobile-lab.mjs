@@ -131,6 +131,9 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
     }
   }
 
+  // Rust completes native exports asynchronously; report only confirmed disk results.
+  globalThis.lightcraftNativeExportStatus = message => notify(message);
+
   function notify(message) {
     const toast = el("toast");
     toast.textContent = String(message);
@@ -545,7 +548,10 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
       format: "jpeg",
       quality: 92
     });
-    notify("Export prepared. Check your browser downloads or the Files app.");
+    const info = await call("web.stats");
+    notify(info?.storage === "native"
+      ? "Saving exported photo to the LightCraft folder in Files…"
+      : "Export prepared. Check your browser downloads.");
   }));
 
   (async () => {
