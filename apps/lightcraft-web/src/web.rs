@@ -148,7 +148,7 @@ async fn read_file(originals: Originals, backend: Option<Backend>, file: web_sys
 // file.addPhotos indirectly through an async WASM command would lose iOS Safari
 // user activation before the browser picker can open.
 thread_local! {
-    static MOBILE_LAB_IMPORT: std::cell::RefCell<Option<(Originals, Option<Backend>, egui::Context)>> =
+    static MOBILE_LAB_IMPORT: std::cell::RefCell<Option<(Originals, Option<Backend>, egui::Context, Rc<Cell<bool>>)>> =
         const { std::cell::RefCell::new(None) };
 }
 
@@ -158,7 +158,7 @@ thread_local! {
 #[wasm_bindgen]
 pub fn import_browser_files(files: web_sys::FileList) {
     let host = MOBILE_LAB_IMPORT.with(|i| i.borrow().clone());
-    let Some((originals, backend, ctx)) = host else {
+    let Some((originals, backend, ctx, _)) = host else {
         log::warn!("mobile prototype picker used before LightCraft finished opening");
         return;
     };
@@ -167,6 +167,42 @@ pub fn import_browser_files(files: web_sys::FileList) {
             wasm_bindgen_futures::spawn_local(read_file(originals.clone(), backend.clone(), file, ctx.clone()));
         }
     }
+}
+
+/// Restore a LightCraft ZIP chosen through a genuine HTML file picker.
+/// Uses the verified, non-destructive Rust restore path; existing photos and
+/// edits remain untouched on failure.
+#[wasm_bindgen]
+pub fn restore_browser_backup_file(file: web_sys::File) {
+    let host = MOBILE_LAB_IMPORT.with(|i| i.borrow().clone());
+    let Some((_, Some(backend), ctx, frozen)) = host else {
+        notice("Cannot restore: the local library storage is not ready.");
+        return;
+    };
+    if !file.name().to_ascii_lowercase().ends_with(".zip") {
+        notice("Select a LightCraft ZIP backup, not an image or another file.");
+        return;
+    }
+    notice(format!("Validating the selected backup {}…", file.name()));
+    wasm_bindgen_futures::spawn_local(async move {
+        match safety::restore(file, backend).await {
+            Ok(_) => {
+                // Freeze the old session's writes before reloading the newly
+                // restored catalog. The archive itself was fully verified.
+                frozen.set(true);
+                notice("Backup verified and restored; reopening the library.");
+                if let Some(window) = window() {
+                    if let Err(error) = window.location().reload() {
+                        notice(format!("Restore completed but reload failed: {error:?}. Reopen LightCraft."));
+                    }
+                }
+            }
+            Err(error) => {
+                notice(format!("Restore failed: {error}. Your existing library remains intact."));
+                ctx.request_repaint();
+            }
+        }
+    });
 }
 
 /// Show the browser's open dialog; picked files are imported asynchronously.
@@ -242,11 +278,11 @@ fn services(originals: Originals, backend: Option<Backend>, files: Files, frozen
                 })
                 .collect();
             let files = backup_files.clone();
-            notice("Backing up the library… (the download starts when it's ready)");
+            notice("Building your complete backup… You must save the ZIP to Files once it is prepared.");
             wasm_bindgen_futures::spawn_local(async move {
                 match safety::backup(files, b, names).await {
                     Ok((n, bytes)) => notice(format!(
-                        "Library backed up: {n} original{} ({:.1} MB). Keep the file somewhere safe.",
+                        "Backup prepared: {n} original{} ({:.1} MB). Tap Share / Save to Files now, then verify the ZIP in Files.",
                         if n == 1 { "" } else { "s" },
                         bytes / 1e6
                     )),
@@ -591,7 +627,7 @@ impl WebApp {
         CTX.with(|c| *c.borrow_mut() = Some(cc.egui_ctx.clone()));
         // One web application only: DOM Mobile Studio controls the Rust renderer.
         MOBILE_LAB_IMPORT.with(|i| {
-            *i.borrow_mut() = Some((originals.clone(), backend.clone(), cc.egui_ctx.clone()));
+            *i.borrow_mut() = Some((originals.clone(), backend.clone(), cc.egui_ctx.clone(), frozen.clone()));
         });
         let origin = lightcraft_ui_egui::monotonic_ms();
         WebApp {
