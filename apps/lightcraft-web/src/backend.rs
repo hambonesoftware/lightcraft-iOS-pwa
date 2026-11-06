@@ -95,37 +95,27 @@ async fn idb_done(tx: &web_sys::IdbTransaction) -> Result<(), String> {
     JsFuture::from(p).await.map(|_| ()).map_err(err)
 }
 
-
 fn native_storage_bridge() -> Option<JsValue> {
-    Reflect::get(&js_sys::global(), &"__lightcraftNativeStorage".into())
-        .ok()
-        .filter(|v| !v.is_null() && !v.is_undefined())
+    Reflect::get(&js_sys::global(), &"__lightcraftNativeStorage".into()).ok().filter(|v| !v.is_null() && !v.is_undefined())
 }
 
 fn is_native_shell() -> bool {
-    let capacitor_protocol = web_sys::window()
-        .and_then(|w| w.location().protocol().ok())
-        .is_some_and(|protocol| protocol == "capacitor:");
-    if capacitor_protocol { return true; }
+    let capacitor_protocol = web_sys::window().and_then(|w| w.location().protocol().ok()).is_some_and(|protocol| protocol == "capacitor:");
+    if capacitor_protocol {
+        return true;
+    }
     let Ok(cap) = Reflect::get(&js_sys::global(), &"Capacitor".into()) else { return false };
     let Ok(check) = Reflect::get(&cap, &"isNativePlatform".into()) else { return false };
-    check.dyn_into::<Function>().ok()
-        .and_then(|f| f.call0(&cap).ok())
-        .is_some_and(|v| v.is_truthy())
+    check.dyn_into::<Function>().ok().and_then(|f| f.call0(&cap).ok()).is_some_and(|v| v.is_truthy())
 }
 
 /// Execute the installed iOS filesystem bridge on the main thread. JS returns
 /// promises, so Rust's existing asynchronous library/thumbnail/original code is
 /// unchanged. The bridge is never available to background render workers.
-async fn native_call(
-    method: &str,
-    path: Option<&str>,
-    bytes: Option<&[u8]>,
-    offset: Option<usize>,
-) -> Result<JsValue, String> {
+async fn native_call(method: &str, path: Option<&str>, bytes: Option<&[u8]>, offset: Option<usize>) -> Result<JsValue, String> {
     let bridge = native_storage_bridge().ok_or("native Documents bridge is unavailable")?;
-    let function = Reflect::get(&bridge, &method.into()).map_err(err)?
-        .dyn_into::<Function>().map_err(|_| format!("native backend has no `{method}` method"))?;
+    let function =
+        Reflect::get(&bridge, &method.into()).map_err(err)?.dyn_into::<Function>().map_err(|_| format!("native backend has no `{method}` method"))?;
     let params = Object::new();
     if let Some(path) = path {
         let key = if method == "list" { "dir" } else { "path" };
@@ -138,8 +128,7 @@ async fn native_call(
         Reflect::set(&params, &"offset".into(), &JsValue::from_f64(offset as f64)).map_err(err)?;
     }
     let response = function.call1(&bridge, &params).map_err(err)?;
-    let promise = response.dyn_into::<js_sys::Promise>()
-        .map_err(|_| "native backend method did not return a promise".to_string())?;
+    let promise = response.dyn_into::<js_sys::Promise>().map_err(|_| "native backend method did not return a promise".to_string())?;
     JsFuture::from(promise).await.map_err(err)
 }
 
@@ -230,8 +219,7 @@ impl Backend {
         match self {
             Backend::Native => {
                 let bytes = native_call("read", Some(path), None, None).await?;
-                if bytes.is_null() || bytes.is_undefined() { Ok(None) }
-                else { Ok(Some(Uint8Array::new(&bytes).to_vec())) }
+                if bytes.is_null() || bytes.is_undefined() { Ok(None) } else { Ok(Some(Uint8Array::new(&bytes).to_vec())) }
             }
             Backend::Opfs(root) => {
                 let Some(h) = Self::opfs_file(root, path, false).await? else { return Ok(None) };
