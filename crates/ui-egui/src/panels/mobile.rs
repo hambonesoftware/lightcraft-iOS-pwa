@@ -238,7 +238,13 @@ fn mobile_tab(ui: &mut egui::Ui, width: f32, label: &str, icon: Icon, active: bo
             Stroke::new(2.0, t.accent),
         );
     }
-    let ink = if !enabled { t.text_dim } else if active { t.text } else { t.text_label };
+    let ink = if !enabled {
+        t.text_dim
+    } else if active {
+        t.text
+    } else {
+        t.text_label
+    };
     let glyph = Rect::from_center_size(pos2(rect.center().x, rect.top() + 18.0), vec2(19.0, 19.0));
     paint(ui.painter(), glyph, icon, ink);
     ui.painter().text(pos2(rect.center().x, rect.bottom() - 11.0), Align2::CENTER_CENTER, label, t.font(11.0), ink);
@@ -289,7 +295,8 @@ fn navigation(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileStat
                 if mobile_tab(ui, 67.0, "Crop", Icon::Crop, detail && state.drawer == Drawer::Tools && app.ui.right == RightPanel::Crop, has_photo) {
                     select_tool(app, state, RightPanel::Crop);
                 }
-                if mobile_tab(ui, 67.0, "Mask", Icon::Mask, detail && state.drawer == Drawer::Tools && app.ui.right == RightPanel::Masking, has_photo) {
+                if mobile_tab(ui, 67.0, "Mask", Icon::Mask, detail && state.drawer == Drawer::Tools && app.ui.right == RightPanel::Masking, has_photo)
+                {
                     select_tool(app, state, RightPanel::Masking);
                 }
                 if mobile_tab(ui, 67.0, "More", Icon::More, state.drawer == Drawer::More, true) {
@@ -481,10 +488,8 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     let (photo_rect, sheet_rect) = mobile_work_area(full, has_search, state.drawer, state.expanded, previewing);
     if state.drawer != Drawer::Closed && sheet_rect.height() > 0.0 {
         region(ui, "mobile_inspector", sheet_rect, t.chrome, vec2(11.0, 5.0), |ui| drawer(app, ui, &mut state));
-        ui.painter().line_segment(
-            [pos2(sheet_rect.left(), sheet_rect.top()), pos2(sheet_rect.right(), sheet_rect.top())],
-            Stroke::new(1.0, t.divider),
-        );
+        ui.painter()
+            .line_segment([pos2(sheet_rect.left(), sheet_rect.top()), pos2(sheet_rect.right(), sheet_rect.top())], Stroke::new(1.0, t.divider));
     }
     region(ui, "mobile_photo", photo_rect, t.canvas, vec2(0.0, 0.0), |ui| central(app, ui, state.drawer));
     ui.painter().line_segment([pos2(nav_rect.left(), nav_rect.top()), pos2(nav_rect.right(), nav_rect.top())], Stroke::new(1.0, t.divider));
