@@ -92,6 +92,37 @@ These are **logical points**, not device pixels. This prevents treating all iPad
 
 Check low-memory iPhone photo editing and scrolling performance; portrait and landscape tool reachability; accurate preset thumbnail/large-image preview parity; switching photos during an uncommitted look; and output export matching the applied look. Fine-tuning the lower-level slider touch handling, mask handles, and iOS keyboard remains a separate quality pass.
 
+## Mobile inspector redesign: screenshot-led usability correction
+
+### Why this exists
+
+The November 5 iPhone screenshot showed the old Presets inspector as a large blank gray panel with the actual controls clipped at the top edge, oversized rectangular navigation buttons, and a photograph separated from its adjustment controls. This is a **layout correctness defect**, not a missing preset-processing feature.
+
+### Architectural change
+
+- Replace stacked/nested top, bottom and central egui panels on compact screens with explicit, nonoverlapping rectangles derived from the actual available viewport.
+- Give the photo canvas, bottom navigation, inspector and header independent clipping boundaries.
+- Draw the Looks inspector before the photo canvas so a selected look can preview in the actual loupe on the same UI pass.
+- Keep phone-safe minimum canvas height, including when a preset selection reveals its intensity slider and Apply/Cancel controls.
+- Provide a compact, labeled icon rail with scrollable correction destinations and a restrained selected indicator instead of full-size desktop buttons.
+- Retain the original desktop workspace unchanged.
+
+### Looks / Presets interaction
+
+- Group chips select Favorites and existing preset groups.
+- A horizontal visual strip shows photo-specific thumbnails; avoid a full desktop-style vertical preset catalog inside a small bottom inspector.
+- A page contains at most 12 presets; the Prev/Next buttons reach additional pages of larger imported preset groups without overwhelming mobile WebKit.
+- Selecting a thumbnail shows a reversible, uncommitted live preview of the photo.
+- Strength and explicit Apply/Cancel appear only when a look is selected; the inspector grows to accommodate them.
+- Leaving Looks or closing the inspector discards an uncommitted preview.
+- All actual rendering and commits go through LightCraft's existing variant renderer and `preset.apply` command.
+
+### Regression checks
+
+The viewport geometry tests cover small iPhone landscape, portrait and taller windows and ensure the photo and inspector do not overlap, that the bottom dock remains inside the viewport, and that a look preview grants extra inspector space.
+
+**Physical-device release gates:** On iPhone portrait and landscape, ensure no blank inspector area, fully visible group chips and images, properly reachable Apply/Cancel actions, correct photo preview, a responsive photo canvas, and no automatic keyboard. Repeat after returning from Files import/export and after switching presets.
+
 ## Interaction test matrix
 
 ### Functional (automated)
