@@ -85,6 +85,7 @@ test("mobile layout honors device safe areas and reserves the photo canvas", () 
   assert.match(html, /id="files_picker"/);
   assert.match(html, /id="panel_toggle"/);
   assert.match(html, /id="storage_status"/);
+  assert.match(html, /id="backup_library"/);
 });
 
 test("prototype does not contain a second fake image editing pipeline", () => {
@@ -99,5 +100,6 @@ test("prototype does not contain a second fake image editing pipeline", () => {
   assert.match(js, /call\("preset\.favorite"/);
   assert.match(js, /storage\.persist\(\)/);
   assert.match(js, /storage\.estimate\(\)/);
+  assert.match(js, /call\("file\.backupLibrary"\)/);
   assert.doesNotMatch(js, /getImageData|putImageData|ctx\.filter|canvas\.toDataURL|fetch\(["']https?:/);
 });
