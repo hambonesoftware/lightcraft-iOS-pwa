@@ -14,6 +14,7 @@ const html = readFileSync(new URL("../apps/lightcraft-web/index.html", import.me
 const preview = readFileSync(new URL("../apps/lightcraft-web/mobile-lab.html", import.meta.url), "utf8");
 const css = readFileSync(new URL("../apps/lightcraft-web/mobile-lab.css", import.meta.url), "utf8");
 const rust = readFileSync(new URL("../apps/lightcraft-web/src/web.rs", import.meta.url), "utf8");
+const backend = readFileSync(new URL("../apps/lightcraft-web/src/backend.rs", import.meta.url), "utf8");
 
 test("each focused correction tab maps to the actual engine section identifiers", () => {
   assert.deepEqual(CATEGORY_SECTIONS.light, ["light", "curve"]);
@@ -104,4 +105,14 @@ test("prototype does not contain a second fake image editing pipeline", () => {
   assert.match(js, /call\("app\.export"/);
   assert.doesNotMatch(js, /call\("dialog\.export"/);
   assert.doesNotMatch(js, /getImageData|putImageData|ctx\.filter|canvas\.toDataURL|fetch\(["']https?:/);
+});
+
+test("installed iOS app selects Documents storage and does not fall back to OPFS", () => {
+  assert.match(html, /initializeLightCraftNativeStorage/);
+  assert.match(html, /await initializeLightCraftNativeStorage\(\)/);
+  assert.match(rust, /b\.kind\(\) == "native"/);
+  assert.match(backend, /Backend::Native/);
+  assert.match(backend, /native Documents storage bridge failed to initialize/);
+  assert.match(backend, /native_call\("writeAt"/);
+  assert.match(css, /\.storage-status/);
 });
