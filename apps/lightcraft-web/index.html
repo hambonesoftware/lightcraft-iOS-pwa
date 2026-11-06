@@ -113,7 +113,7 @@
     }
   </script>
   <script type="module">
-    import init, { start, command, import_browser_files } from "./lightcraft_web.js";
+    import init, { start, command, import_browser_files, restore_browser_backup_file } from "./lightcraft_web.js";
     import { mountMobileStudio } from "./mobile-lab.mjs";
 
     (async () => {
@@ -128,7 +128,7 @@
       await init({ module_or_path: module });
       globalThis.lightcraft = { command };
       start(font);
-      mountMobileStudio({ command, importBrowserFiles: import_browser_files });
+      mountMobileStudio({ command, importBrowserFiles: import_browser_files, restoreBrowserBackupFile: restore_browser_backup_file });
     })().catch(error => {
       console.error(error);
       document.getElementById("lightcraft_loading").textContent = "Could not open LightCraft Studio: " + String(error);
