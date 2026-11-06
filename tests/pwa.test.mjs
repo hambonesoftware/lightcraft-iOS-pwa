@@ -46,7 +46,10 @@ test("installation precaches the editor but never user photo data", async () => 
   let operation;
   events.get("install")({ waitUntil: (promise) => { operation = promise; } });
   await operation;
-  assert.equal(added.length, 8);
+  assert.equal(added.length, 11);
+  assert.ok(added.some((name) => name.endsWith("/mobile-lab.html")));
+  assert.ok(added.some((name) => name.endsWith("/mobile-lab.css")));
+  assert.ok(added.some((name) => name.endsWith("/mobile-lab.mjs")));
   assert.ok(added.some((name) => name.endsWith("/lightcraft_web_bg.wasm")));
   assert.ok(added.some((name) => name.endsWith("/lightcraft_web.js")));
   assert.ok(!added.some((name) => name.includes("originals/") || name.includes("library/")));
