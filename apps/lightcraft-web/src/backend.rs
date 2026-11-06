@@ -3,7 +3,7 @@
 //! window and from render workers alike. Keys are `/`-separated paths (OPFS directories; plain
 //! IndexedDB keys).
 
-use js_sys::{Reflect, Uint8Array};
+use js_sys::{Function, Object, Reflect, Uint8Array};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
@@ -16,6 +16,9 @@ const IDB_STORE: &str = "files";
 pub enum Backend {
     Opfs(FileSystemDirectoryHandle),
     Idb(IdbDatabase),
+    /// The installed Capacitor iOS app writes into its native Documents folder.
+    /// Never silently fall back to web storage when this backend is selected.
+    Native,
 }
 
 fn err(e: JsValue) -> String {
@@ -90,9 +93,63 @@ async fn idb_done(tx: &web_sys::IdbTransaction) -> Result<(), String> {
     JsFuture::from(p).await.map(|_| ()).map_err(err)
 }
 
+
+fn native_storage_bridge() -> Option<JsValue> {
+    Reflect::get(&js_sys::global(), &"__lightcraftNativeStorage".into())
+        .ok()
+        .filter(|v| !v.is_null() && !v.is_undefined())
+}
+
+fn is_native_shell() -> bool {
+    let capacitor_protocol = web_sys::window()
+        .and_then(|w| w.location().protocol().ok())
+        .is_some_and(|protocol| protocol == "capacitor:");
+    if capacitor_protocol { return true; }
+    let Ok(cap) = Reflect::get(&js_sys::global(), &"Capacitor".into()) else { return false };
+    let Ok(check) = Reflect::get(&cap, &"isNativePlatform".into()) else { return false };
+    check.dyn_into::<Function>().ok()
+        .and_then(|f| f.call0(&cap).ok())
+        .is_some_and(|v| v.is_truthy())
+}
+
+/// Execute the installed iOS filesystem bridge on the main thread. JS returns
+/// promises, so Rust's existing asynchronous library/thumbnail/original code is
+/// unchanged. The bridge is never available to background render workers.
+async fn native_call(
+    method: &str,
+    path: Option<&str>,
+    bytes: Option<&[u8]>,
+    offset: Option<usize>,
+) -> Result<JsValue, String> {
+    let bridge = native_storage_bridge().ok_or("native Documents bridge is unavailable")?;
+    let function = Reflect::get(&bridge, &method.into()).map_err(err)?
+        .dyn_into::<Function>().map_err(|_| format!("native backend has no `{method}` method"))?;
+    let params = Object::new();
+    if let Some(path) = path {
+        let key = if method == "list" { "dir" } else { "path" };
+        Reflect::set(&params, &key.into(), &path.into()).map_err(err)?;
+    }
+    if let Some(bytes) = bytes {
+        Reflect::set(&params, &"bytes".into(), &Uint8Array::from(bytes)).map_err(err)?;
+    }
+    if let Some(offset) = offset {
+        Reflect::set(&params, &"offset".into(), &JsValue::from_f64(offset as f64)).map_err(err)?;
+    }
+    let response = function.call1(&bridge, &params).map_err(err)?;
+    let promise = response.dyn_into::<js_sys::Promise>()
+        .map_err(|_| "native backend method did not return a promise".to_string())?;
+    JsFuture::from(promise).await.map_err(err)
+}
+
 impl Backend {
     /// OPFS if writable from here (unless `prefer_idb`), else IndexedDB.
     pub async fn open(prefer_idb: bool) -> Result<Backend, String> {
+        if native_storage_bridge().is_some() {
+            return Ok(Backend::Native);
+        }
+        if is_native_shell() {
+            return Err("iOS app native Documents storage bridge failed to initialize; browser storage is forbidden".into());
+        }
         if !prefer_idb
             && opfs_writable()
             && let Some(sm) = storage_manager()
@@ -127,6 +184,7 @@ impl Backend {
         match self {
             Backend::Opfs(_) => "opfs",
             Backend::Idb(_) => "idb",
+            Backend::Native => "native",
         }
     }
 
@@ -168,6 +226,11 @@ impl Backend {
     /// A whole file, or `None` if it doesn't exist.
     pub async fn read(&self, path: &str) -> Result<Option<Vec<u8>>, String> {
         match self {
+            Backend::Native => {
+                let bytes = native_call("read", Some(path), None, None).await?;
+                if bytes.is_null() || bytes.is_undefined() { Ok(None) }
+                else { Ok(Some(Uint8Array::new(&bytes).to_vec())) }
+            }
             Backend::Opfs(root) => {
                 let Some(h) = Self::opfs_file(root, path, false).await? else { return Ok(None) };
                 let file: web_sys::File = JsFuture::from(h.get_file()).await.map_err(err)?.unchecked_into();
@@ -193,6 +256,10 @@ impl Backend {
     /// Write `data` at `offset` keeping the bytes before it (`None`: replace the file). Atomic.
     pub async fn write_at(&self, path: &str, offset: Option<usize>, data: &[u8]) -> Result<(), String> {
         match self {
+            Backend::Native => {
+                let method = if offset.is_some() { "writeAt" } else { "write" };
+                native_call(method, Some(path), Some(data), offset).await.map(|_| ())
+            }
             Backend::Opfs(root) => {
                 let h = Self::opfs_file(root, path, true).await?.ok_or("can't create file")?;
                 let opts = web_sys::FileSystemCreateWritableOptions::new();
@@ -238,6 +305,7 @@ impl Backend {
     /// Is there a file at `path`?
     pub async fn exists(&self, path: &str) -> Result<bool, String> {
         match self {
+            Backend::Native => Ok(native_call("exists", Some(path), None, None).await?.is_truthy()),
             Backend::Opfs(root) => Ok(Self::opfs_file(root, path, false).await?.is_some()),
             Backend::Idb(db) => {
                 let (_tx, store) = Self::idb_store(db, false)?;
@@ -249,6 +317,7 @@ impl Backend {
 
     pub async fn remove(&self, path: &str) -> Result<(), String> {
         match self {
+            Backend::Native => native_call("remove", Some(path), None, None).await.map(|_| ()),
             Backend::Opfs(root) => {
                 let Some((dir, name)) = Self::parent(root, path, false).await? else { return Ok(()) };
                 match JsFuture::from(dir.remove_entry(&name)).await {
@@ -268,6 +337,10 @@ impl Backend {
     /// Names of the files directly inside `dir`.
     pub async fn list(&self, dir: &str) -> Result<Vec<String>, String> {
         match self {
+            Backend::Native => {
+                let items = native_call("list", Some(dir), None, None).await?;
+                Ok(js_sys::Array::from(&items).iter().filter_map(|v| v.as_string()).collect())
+            }
             Backend::Opfs(root) => {
                 // `parent` of a child path is `dir` itself
                 let Some((handle, _)) = Self::parent(root, &format!("{dir}/-"), false).await? else { return Ok(Vec::new()) };
@@ -291,6 +364,7 @@ impl Backend {
     /// Delete everything (the "reset" escape hatch: `?reset` in the URL).
     pub async fn clear(&self) -> Result<(), String> {
         match self {
+            Backend::Native => native_call("clear", None, None, None).await.map(|_| ()),
             Backend::Opfs(root) => {
                 for name in dir_keys(root).await? {
                     let opts = web_sys::FileSystemRemoveOptions::new();
@@ -327,6 +401,11 @@ async fn dir_keys(dir: &FileSystemDirectoryHandle) -> Result<Vec<String>, String
 /// Ask the browser not to evict our storage under pressure; `on_result(granted)` once known
 /// (`false` also when the browser has no storage manager).
 pub fn request_persistence(on_result: impl FnOnce(bool) + 'static) {
+    // The installed iOS app uses app-owned Documents instead of browser quota.
+    if native_storage_bridge().is_some() {
+        on_result(true);
+        return;
+    }
     let Some(sm) = storage_manager() else {
         on_result(false);
         return;
