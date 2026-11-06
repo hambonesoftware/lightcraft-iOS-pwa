@@ -83,7 +83,7 @@ try {
   });
   const fixtureHandle = await page.waitForFunction(async filename => {
     try {
-      const result = JSON.parse(await lightcraft.command("catalog.query", JSON.stringify({ limit: 200 })));
+      const result = JSON.parse(await lightcraft.command("catalog.query", JSON.stringify({ filter: {}, limit: 200 })));
       const match = result.photos.find(photo => photo.fileName === filename);
       return match?.id ?? false;
     } catch {
@@ -92,14 +92,19 @@ try {
   }, fixtureName, { timeout: 60000 });
   const fixtureId = await fixtureHandle.jsonValue();
   assert.ok(Number.isSafeInteger(fixtureId), "new photo must have a real Rust catalog ID");
-  await page.evaluate(async id => {
-    await lightcraft.command("library.select", JSON.stringify({ ids: [id], active: id }));
-    await lightcraft.command("view.zoomFit", "{}");
-  }, fixtureId);
-  // A new empty library opens its native library sheet automatically.
-  if (await page.locator("#library_dialog").evaluate(dialog => dialog.open)) {
-    await page.getByRole("button", { name: "Close library" }).click();
+  // Choose the imported photo through the mobile library rather than bypassing the UI.
+  if (!(await page.locator("#library_dialog").evaluate(dialog => dialog.open))) {
+    await page.getByRole("button", { name: "Open photo library" }).click();
   }
+  const fixtureRow = page.locator(".library-item").filter({ hasText: fixtureName });
+  await fixtureRow.waitFor({ state: "visible", timeout: 20000 });
+  await fixtureRow.click();
+  await page.waitForFunction(async id => {
+    const state = JSON.parse(await lightcraft.command("library.state", "{}"));
+    return state.selection?.active === id;
+  }, fixtureId, { timeout: 20000 });
+  await page.locator("#library_dialog").waitFor({ state: "hidden" });
+  await page.evaluate(async () => lightcraft.command("view.zoomFit", "{}"));
   await page.getByRole("tab", { name: "Light" }).click();
   await page.screenshot({ path: reportDir + "/phone-light.png", fullPage: true });
 
