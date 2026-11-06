@@ -235,6 +235,18 @@ fn download(path: &str, bytes: &[u8]) -> Result<(), String> {
     let name = download_name(path);
     opts.set_type(crate::store::mime_for(name));
     let blob = web_sys::Blob::new_with_u8_array_sequence_and_options(&arr, &opts).map_err(e)?;
+    // Mobile Studio's Save action captures the REAL Rust-encoded JPEG and
+    // commits it to a flat local IndexedDB Saved pool before it reports saved.
+    // All other export calls keep the existing browser download behavior.
+    if let Ok(receiver) = js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("lightcraftReceivePhotoExport"))
+        && let Some(callback) = receiver.dyn_ref::<js_sys::Function>()
+    {
+        let handled =
+            callback.call2(&JsValue::NULL, blob.as_ref(), &JsValue::from_str(name)).map_err(|error| format!("photo handoff failed: {error:?}"))?;
+        if handled.as_bool() == Some(true) {
+            return Ok(());
+        }
+    }
     let url = web_sys::Url::create_object_url_with_blob(&blob).map_err(e)?;
     let doc = window().and_then(|w| w.document()).ok_or("no document")?;
     let a: web_sys::HtmlAnchorElement = doc.create_element("a").map_err(e)?.unchecked_into();

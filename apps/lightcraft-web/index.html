@@ -43,8 +43,9 @@
         <button id="redo" class="icon-action" type="button" aria-label="Redo" title="Redo">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h2"/></svg>
         </button>
-        <button id="export_photo" class="icon-action" type="button" aria-label="Export photo" title="Export">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m0 0L7 8m5-5 5 5"/><path d="M5 14v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6"/></svg>
+        <button id="export_photo" class="icon-action save-photo-action" type="button" aria-label="Save edited photo" title="Save edited photo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M7 3v6h10V3M8 21v-8h8v8"/></svg>
+          <span>Save</span>
         </button>
       </div>
     </header>
@@ -88,6 +89,8 @@
       <p class="privacy-caption">Your originals and edits live on this device, in private web-app storage. Back up important photographs regularly: uninstalling the app, clearing its data, or storage eviction may delete the local library.</p>
       <p id="storage_status" class="storage-status" role="status" aria-live="polite">Checking available device storage…</p>
       <button id="import_photo" type="button" class="import-button">+ Import photographs</button>
+      <button id="open_saved_pool" type="button" class="backup-button">Saved photos <span id="saved_pool_badge" aria-live="polite"></span></button>
+      <p class="privacy-caption">Finished images live in a flat local Saved pool. Use Share to Photos → Save Image to make a copy in the phone's Photos library. Saved pool data is still erased with PWA website data.</p>
       <button id="backup_library" type="button" class="backup-button">Prepare complete library backup</button>
       <section id="backup_ready" class="backup-ready" aria-label="Library backup ready to save" hidden>
         <p id="backup_message" role="status" aria-live="polite">Backup prepared in memory. It is not yet stored outside LightCraft.</p>
@@ -99,6 +102,26 @@
       <input id="restore_backup_picker" type="file" accept=".zip,application/zip" hidden>
       <div id="library_count" class="library-count" role="status"></div>
       <div id="library_items" class="library-items"></div>
+    </dialog>
+    <dialog id="save_result_dialog" class="saved-dialog" aria-label="Finished photo actions">
+      <div class="dialog-header">
+        <div><span class="eyebrow">FINISHED PHOTO</span><h2>Saved in LightCraft</h2></div>
+        <button id="finish_save" type="button" class="close-button" aria-label="Close saved photo menu">Done</button>
+      </div>
+      <img id="saved_photo_preview" class="saved-photo-preview" alt="Saved edited photograph" hidden>
+      <p id="saved_photo_name" class="saved-photo-title"></p>
+      <p class="privacy-caption">The finished image is in LightCraft's local Saved pool, not yet Apple Photos. Tap Share to Photos, then choose <strong>Save Image</strong> in the iOS share sheet.</p>
+      <button id="share_saved_photo" class="import-button" type="button">Share to Photos</button>
+      <button id="download_saved_photo" class="backup-button" type="button">Download image to Files</button>
+    </dialog>
+    <dialog id="saved_pool_dialog" class="library-dialog saved-pool-dialog" aria-label="Finished saved photos">
+      <div class="dialog-header">
+        <div><span class="eyebrow">ON THIS DEVICE</span><h2>Saved photos</h2></div>
+        <button id="close_saved_pool" class="close-button" type="button" aria-label="Close saved photos">Done</button>
+      </div>
+      <p class="privacy-caption">All finished photographs in one pool, newest first. These are local PWA files, not Apple Photos copies. Share each photo to Photos for a copy outside WebKit storage.</p>
+      <p id="saved_pool_count" class="library-count" role="status" aria-live="polite"></p>
+      <div id="saved_pool_items" class="saved-pool-items"></div>
     </dialog>
     <input id="files_picker" type="file" accept="image/*,.dng,.cr2,.cr3,.nef,.arw,.raf,.rw2,.orf,.pef,.tif,.tiff" multiple hidden>
     <div id="toast" role="status" aria-live="polite" class="toast" hidden></div>

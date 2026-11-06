@@ -229,6 +229,39 @@ try {
     JSON.parse(await lightcraft.command("develop.controls", JSON.stringify({ section: "light" }))));
   const reverted = undone.find(control => control.id === "light.exposure");
   assert.ok(reverted && Math.abs(reverted.value - current.value) < 0.00001, "Undo restores original exposure");
+  // Save must render through the actual Rust JPEG pipeline, persist a
+  // real finished image in IndexedDB, and show the contextual Photos menu.
+  await page.getByRole("button", { name: "Save edited photo" }).click();
+  await page.locator("#save_result_dialog").waitFor({ state: "visible", timeout: 90000 });
+  assert.match(await page.locator("#saved_photo_name").textContent(), /-LightCraft\.jpg$/);
+  const finishedRecords = await page.evaluate(async () => {
+    const database = await new Promise((resolve, reject) => {
+      const req = indexedDB.open("lightcraft-finished-photos");
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    const photos = await new Promise((resolve, reject) => {
+      const req = database.transaction("items", "readonly").objectStore("items").getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return photos.map(photo => ({ name: photo.name, size: photo.size }));
+  });
+  assert.equal(finishedRecords.length, 1, "Save must create one finished image in the flat local pool");
+  assert.ok(finishedRecords[0].size > 100, "Saved item must contain JPEG bytes, not only a filename");
+  const savedDownload = page.waitForEvent("download", { timeout: 20000 });
+  await page.getByRole("button", { name: "Download image to Files" }).click();
+  const exported = await savedDownload;
+  assert.equal(exported.suggestedFilename(), finishedRecords[0].name);
+  await page.getByRole("button", { name: "Close saved photo menu" }).click();
+  await page.getByRole("button", { name: "Open photo library" }).click();
+  await page.getByRole("button", { name: /Saved photos/ }).click();
+  await page.locator(".saved-pool-item").first().waitFor({ state: "visible", timeout: 20000 });
+  assert.equal(await page.locator(".saved-pool-item").count(), 1);
+  await page.locator(".saved-pool-open").first().click();
+  await page.locator("#save_result_dialog").waitFor({ state: "visible" });
+  await page.screenshot({ path: reportDir + "/phone-save-to-photos.png", fullPage: true });
+  await page.getByRole("button", { name: "Close saved photo menu" }).click();
   assert.deepEqual(errors, [], "browser page should not raise unhandled JavaScript errors");
   console.log("Mobile Studio browser smoke passed; screenshots in " + reportDir);
 } catch (error) {
