@@ -1,4 +1,26 @@
-> **Unofficial LightCraft Local fork.** This iOS/iPadOS web-app adaptation is maintained by hambonesoftware. Based on the open-source LightCraft editor by the ArtCraft team; not affiliated with or endorsed by the ArtCraft team.
+> [!IMPORTANT]
+> **LightCraft Local is an unofficial mobile-first adaptation of [LightCraft](https://github.com/storytold/lightcraft), originally developed by the [ArtCraft team](https://getartcraft.com/).** The Rust photo-processing and non-destructive editing engine, core app architecture and original features are the work of ArtCraft and the LightCraft contributors. [Hambone Software](https://github.com/hambonesoftware) maintains this iPhone/iPad-oriented fork; it is **not affiliated with, sponsored by, or endorsed by ArtCraft**.
+>
+> **Original source:** [storytold/lightcraft](https://github.com/storytold/lightcraft) · **Original website:** [getartcraft.com/apps/lightcraft](https://getartcraft.com/apps/lightcraft) · **This fork:** [hambonesoftware/lightcraft-iOS-pwa](https://github.com/hambonesoftware/lightcraft-iOS-pwa)
+
+## LightCraft Local — same engine, mobile-first frontend
+
+**Original LightCraft image engine. A new mobile-first way to use it.** This fork retains the upstream **Rust/WebAssembly non-destructive photo processing, rendering, existing catalog, presets and editing commands**. The focus of this fork is the **interface**: iPhone/iPad-friendly navigation, touch-sized controls, compact correction categories, a photo-first workspace, presets, and installable PWA support. It is not a separate photo engine or a ground-up rewrite.
+
+| Layer | Original LightCraft | What this mobile fork changes |
+|---|---|---|
+| Photo engine and image quality | Original Rust develop/render pipeline | **Reused, not rewritten** |
+| Editing and photos | Existing non-destructive tools, catalog, command APIs, and OPFS/IndexedDB browser library | Same underlying editing/storage system; no new cloud image backend |
+| User experience | Original desktop/web editor | Mobile-first responsive layout, touch controls, correction categories, compact panels and preset navigation |
+| Browser install | Upstream WebAssembly editor | iOS/iPadOS Home Screen PWA packaging, GitHub Pages deployment and offline app-shell caching |
+| Experimental alternative interface | Upstream Rust/egui image loupe and command bridge | [Mobile Studio](apps/lightcraft-web/mobile-lab.html) adds an HTML/CSS/JS touch frontend that **calls the original Rust/WASM engine**, not duplicate filters |
+
+**Credit:** LightCraft was created by the **[ArtCraft team and open-source contributors](https://github.com/storytold/lightcraft)**. All original image processing, rendering, and extensive core features should be credited to them. Our work is a mobile-focused community adaptation. The longer feature descriptions below are derived from upstream documentation and do not claim new authorship or complete feature parity on iOS.
+
+This is still evolving: advanced mobile gestures, imports/exports and browser-storage durability need physical device testing. Original images and edits remain in the existing device-local browser library; browser data can be deleted or evicted, so maintain backups. See [iOS/PWA setup and storage guidance](PWA-IOS.md) and the [mobile UX plan](MOBILE_UX_SPEC.md).
+
+---
+
 
 <p align="center">
   <img src="assets/app-icon/hicolor/256x256/apps/ai.storyteller.lightcraft.png" width="128" height="128" alt="LightCraft icon: an engraved lynx on an amber tile">
@@ -689,6 +711,8 @@ And [**ArtCraft**](https://getartcraft.com/) itself, our AI image and video stud
 <br>
 
 ## License and credits
+
+**Original project:** [LightCraft by ArtCraft](https://github.com/storytold/lightcraft) ([website](https://getartcraft.com/apps/lightcraft)). **Unofficial mobile-first derivative:** [LightCraft Local by Hambone Software](https://github.com/hambonesoftware/lightcraft-iOS-pwa). This fork keeps the original Rust/WebAssembly photo engine and preserves upstream authorship, copyright, and required attribution; ArtCraft is not responsible for this fork's changes.
 
 LightCraft is dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
 Copyright (c) 2026 ArtCraft Team and the LightCraft contributors. Required notices are in [NOTICE](NOTICE).
