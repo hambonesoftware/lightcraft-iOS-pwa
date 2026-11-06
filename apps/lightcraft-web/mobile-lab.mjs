@@ -444,14 +444,21 @@ export function mountMobileStudio({ command, importBrowserFiles, restoreBrowserB
       call("presets.list")
     ]);
     const selected = activePhotoId(library);
-    if (selected !== activeId) lastAppliedPreset = null;
+    if (selected !== activeId) {
+      lastAppliedPreset = null;
+      // A saved photo's image rectangle belongs to that photo. A new
+      // selection must never inherit a stale pinch anchor or zoom snapshot.
+      photoGestures.reset();
+    }
     activeId = selected;
     catalog = Array.isArray(photos?.photos) ? photos.photos : [];
     specs = Array.isArray(controls) ? controls : [];
     presets = Array.isArray(availablePresets) ? availablePresets : [];
     renderLibrary();
     renderControls();
-    if (activeId !== null) photoGestures.refresh().catch(() => {});
+    if (activeId !== null) {
+      requestAnimationFrame(() => photoGestures.refresh().catch(() => {}));
+    }
   }
 
   async function waitForWasmReady() {
