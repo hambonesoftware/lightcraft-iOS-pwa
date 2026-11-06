@@ -7,6 +7,8 @@
  * No photo data is sent to a server or saved in an alternate browser store.
  */
 
+import { createBackupHandoff } from "./backup-files.mjs";
+
 export const CATEGORY_SECTIONS = Object.freeze({
   looks: [],
   light: ["light", "curve"],
@@ -64,8 +66,8 @@ export function fileTypeLabel(photo) {
 
 const el = id => document.getElementById(id);
 
-export function mountMobileStudio({ command, importBrowserFiles }) {
-  if (typeof command !== "function" || typeof importBrowserFiles !== "function") {
+export function mountMobileStudio({ command, importBrowserFiles, restoreBrowserBackupFile }) {
+  if (typeof command !== "function" || typeof importBrowserFiles !== "function" || typeof restoreBrowserBackupFile !== "function") {
     throw new TypeError("LightCraft WASM bridge and native import function are required");
   }
 
@@ -84,6 +86,24 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
   let lastAppliedPreset = null;
   let mutations = Promise.resolve();
   let toastTimer = null;
+  const backupHandoff = createBackupHandoff({
+    navigatorObject: navigator,
+    documentObject: document,
+    urlObject: URL,
+    FileConstructor: File,
+    onReady({ filename, size }) {
+      const sizeMb = Math.max(0.1, Math.round((size / (1024 * 1024)) * 10) / 10);
+      el("backup_message").textContent = filename + " (" + sizeMb + " MB) is ready. It is NOT saved in Files yet.";
+      el("backup_ready").hidden = false;
+    },
+    onNotice(message) {
+      notify(message);
+    }
+  });
+  // The ZIP is staged by Rust; the next actual button tap opens iOS Share,
+  // preserving Safari's transient user activation.
+  globalThis.lightcraftReceiveBackup = (blob, filename) => backupHandoff.stage(blob, filename);
+
 
   async function call(name, params = {}) {
     const raw = await command(name, JSON.stringify(params));
@@ -483,8 +503,41 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
   el("close_library").addEventListener("click", () => libraryDialog.close());
   el("import_photo").addEventListener("click", () => el("files_picker").click());
   el("backup_library").addEventListener("click", () => {
-    notify("Preparing a full library backup. Save the downloaded file somewhere safe.");
+    notify("Preparing a complete library ZIP, including originals and edits…");
     submit(() => call("file.backupLibrary"));
+  });
+  el("share_backup").addEventListener("click", () => {
+    // Safari requires the share call directly within the user's tap.
+    backupHandoff.sharePrepared().catch(error => {
+      if (error?.name === "AbortError") {
+        notify("Sharing canceled. The backup is still ready; tap Save to Files again.");
+      } else {
+        notify(String(error?.message || error) + " You can also use Download backup.");
+      }
+    });
+  });
+  el("download_backup").addEventListener("click", () => {
+    try {
+      backupHandoff.downloadPrepared();
+    } catch (error) {
+      notify(String(error?.message || error));
+    }
+  });
+  el("restore_backup").addEventListener("click", () => {
+    if (!window.confirm("Restore a complete LightCraft backup ZIP? The existing library stays in storage, but the restored library becomes active.")) return;
+    el("restore_backup_picker").click();
+  });
+  el("restore_backup_picker").addEventListener("change", event => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".zip")) {
+      notify("Choose a LightCraft library backup ZIP.");
+      return;
+    }
+    // Rust verifies hashes before switching the active library pointer.
+    restoreBrowserBackupFile(file);
+    notify("Validating backup ZIP and restoring the local photo library…");
   });
 
   // Call WASM during a native file input change, not inside a future command
