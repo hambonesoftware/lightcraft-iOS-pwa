@@ -101,5 +101,7 @@ test("prototype does not contain a second fake image editing pipeline", () => {
   assert.match(js, /storage\.persist\(\)/);
   assert.match(js, /storage\.estimate\(\)/);
   assert.match(js, /call\("file\.backupLibrary"\)/);
+  assert.match(js, /call\("app\.export"/);
+  assert.doesNotMatch(js, /call\("dialog\.export"/);
   assert.doesNotMatch(js, /getImageData|putImageData|ctx\.filter|canvas\.toDataURL|fetch\(["']https?:/);
 });
