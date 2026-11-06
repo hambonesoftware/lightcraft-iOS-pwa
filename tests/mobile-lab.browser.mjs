@@ -186,6 +186,8 @@ try {
   const applyLook = page.getByRole("button", { name: "Apply " + firstLook.name, exact: true });
   await applyLook.waitFor({ state: "visible" });
   await applyLook.click();
+  await pollRust("history.list", {}, state =>
+    Array.isArray(state.history) && state.history.some(label => String(label).includes("Preset: " + firstLook.name)), 20000);
   await page.screenshot({ path: reportDir + "/phone-looks.png", fullPage: true });
   await page.getByRole("tab", { name: "Effects" }).click();
   assert.equal(await page.getByRole("tab", { name: "Effects" }).getAttribute("aria-selected"), "true");
