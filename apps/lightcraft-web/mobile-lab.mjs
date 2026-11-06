@@ -268,7 +268,7 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
     const [library, controls, photos] = await Promise.all([
       call("library.state"),
       call("develop.controls"),
-      call("catalog.query", { limit: 200, offset: 0 })
+      call("catalog.query", { filter: {}, limit: 200, offset: 0 })
     ]);
     activeId = activePhotoId(library);
     catalog = Array.isArray(photos?.photos) ? photos.photos : [];
