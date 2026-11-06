@@ -93,6 +93,35 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
     return JSON.parse(raw);
   }
 
+  async function checkStorageDurability() {
+    const status = el("storage_status");
+    if (!status) return;
+    const storage = navigator.storage;
+    if (!storage || typeof storage.persisted !== "function") {
+      status.textContent = "This device does not report storage durability. Keep a separate photo backup.";
+      return;
+    }
+    try {
+      let persistent = await storage.persisted();
+      if (!persistent && typeof storage.persist === "function") {
+        // WebKit decides based on its own heuristics, including Home Screen use.
+        // Never claim that this guarantees the files cannot be deleted.
+        persistent = await storage.persist();
+      }
+      const estimate = typeof storage.estimate === "function"
+        ? await storage.estimate().catch(() => null)
+        : null;
+      const usedMb = estimate && Number.isFinite(estimate.usage)
+        ? " · approximately " + Math.round(estimate.usage / (1024 * 1024)) + " MB used"
+        : "";
+      status.textContent = persistent
+        ? "Persistent web-app storage granted" + usedMb + ". Backups are still required."
+        : "Web-app storage may be automatically evicted" + usedMb + ". Back up your originals.";
+    } catch {
+      status.textContent = "Storage protection could not be verified. Back up your originals.";
+    }
+  }
+
   function notify(message) {
     const toast = el("toast");
     toast.textContent = String(message);
@@ -494,6 +523,7 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
     try {
       await waitForWasmReady();
       await refreshState();
+      checkStorageDurability().catch(() => {});
       root.hidden = false;
       loading.hidden = true;
       loading.style.display = "none";
