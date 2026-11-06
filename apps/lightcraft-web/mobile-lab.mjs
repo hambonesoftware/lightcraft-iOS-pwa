@@ -9,6 +9,8 @@
 
 import { createBackupHandoff } from "./backup-files.mjs";
 import { mountSavedPhotosUI } from "./saved-photos-ui.mjs";
+import { createLatestValueScheduler } from "./mobile-performance.mjs";
+import { mountPhotoGestures } from "./mobile-gestures.mjs";
 
 export const CATEGORY_SECTIONS = Object.freeze({
   looks: [],
@@ -104,6 +106,13 @@ export function mountMobileStudio({ command, importBrowserFiles, restoreBrowserB
   // The ZIP is staged by Rust; the next actual button tap opens iOS Share,
   // preserving Safari's transient user activation.
   globalThis.lightcraftReceiveBackup = (blob, filename) => backupHandoff.stage(blob, filename);
+  const photoGestures = mountPhotoGestures({
+    canvas: el("lightcraft_canvas"),
+    viewport: el("lightcraft_viewport"),
+    call,
+    activePhoto: () => activeId !== null,
+    onError: error => notify("Could not update zoom: " + String(error))
+  });
   const savedPhotosUI = mountSavedPhotosUI({
     call,
     getSelectedPhoto: () => catalog.find(photo => photo.id === activeId),
@@ -324,21 +333,18 @@ export function mountMobileStudio({ command, importBrowserFiles, restoreBrowserB
       label.htmlFor = range.id;
 
       let editing = false;
-      let delayed = null;
-      let requested = null;
-      let interactionStarted = false;
+      let finishing = false;
+      const scheduler = createLatestValueScheduler(
+        value => submit(() => call("develop.set", { control: spec.id, value })),
+        { onError: error => notify(String(error)) }
+      );
 
-      const begin = () => {
-        if (editing) return;
+      function begin() {
+        if (editing || finishing) return;
         editing = true;
-        submit(() => call("develop.beginInteraction", { label: String(spec.label || "Adjustment") }))
-          .then(() => { interactionStarted = true; });
-      };
-
-      function send(value) {
-        if (requested === value) return;
-        requested = value;
-        submit(() => call("develop.set", { control: spec.id, value }));
+        // The serial command queue guarantees beginInteraction precedes the
+        // first live value. Intermediate input events never fill that queue.
+        submit(() => call("develop.beginInteraction", { label: String(spec.label || "Adjustment") }));
       }
 
       range.addEventListener("pointerdown", begin);
@@ -346,39 +352,37 @@ export function mountMobileStudio({ command, importBrowserFiles, restoreBrowserB
         const value = Number(range.value);
         valueText.textContent = formattedValue(spec, value);
         range.style.setProperty("--percent", percentOf(spec, value) + "%");
-        if (delayed !== null) clearTimeout(delayed);
-        // Real preview during a gesture; the Rust interaction groups it
-        // into one undo step. Dropping intermediate frames protects iOS RAM.
-        delayed = setTimeout(() => {
-          delayed = null;
-          if (!editing) begin();
-          send(value);
-        }, 90);
+        if (!editing && !finishing) begin();
+        if (!finishing) scheduler.push(value);
       });
 
       range.addEventListener("change", () => {
-        if (delayed !== null) clearTimeout(delayed);
-        delayed = null;
-        if (!editing) begin(); // keyboard and VoiceOver range changes
-        send(Number(range.value));
-        const finished = submit(async () => {
-          await call("develop.endInteraction");
-        });
-        finished.then(() => {
-          editing = false;
-          interactionStarted = false;
-          refreshState().catch(error => notify(String(error)));
-        });
-      });
-      range.addEventListener("pointercancel", () => {
-        if (delayed !== null) clearTimeout(delayed);
-        delayed = null;
-        if (editing || interactionStarted) {
-          submit(() => call("develop.cancelInteraction")).finally(() => {
+        if (finishing) return;
+        if (!editing) begin();
+        finishing = true;
+        const finalValue = Number(range.value);
+        // The final value must reach Rust *before* endInteraction to preserve
+        // a single correct undo step, even if the render worker is busy.
+        scheduler.flush(finalValue)
+          .then(() => submit(() => call("develop.endInteraction")))
+          .then(() => refreshState())
+          .catch(error => notify(String(error)))
+          .finally(() => {
             editing = false;
-            interactionStarted = false;
+            finishing = false;
           });
-        }
+      });
+
+      range.addEventListener("pointercancel", () => {
+        if (!editing || finishing) return;
+        finishing = true;
+        scheduler.cancel()
+          .then(() => submit(() => call("develop.cancelInteraction")))
+          .catch(error => notify(String(error)))
+          .finally(() => {
+            editing = false;
+            finishing = false;
+          });
       });
 
       top.append(label, valueText);
@@ -440,13 +444,21 @@ export function mountMobileStudio({ command, importBrowserFiles, restoreBrowserB
       call("presets.list")
     ]);
     const selected = activePhotoId(library);
-    if (selected !== activeId) lastAppliedPreset = null;
+    if (selected !== activeId) {
+      lastAppliedPreset = null;
+      // A saved photo's image rectangle belongs to that photo. A new
+      // selection must never inherit a stale pinch anchor or zoom snapshot.
+      photoGestures.reset();
+    }
     activeId = selected;
     catalog = Array.isArray(photos?.photos) ? photos.photos : [];
     specs = Array.isArray(controls) ? controls : [];
     presets = Array.isArray(availablePresets) ? availablePresets : [];
     renderLibrary();
     renderControls();
+    if (activeId !== null) {
+      requestAnimationFrame(() => photoGestures.refresh().catch(() => {}));
+    }
   }
 
   async function waitForWasmReady() {
@@ -576,7 +588,17 @@ export function mountMobileStudio({ command, importBrowserFiles, restoreBrowserB
     await call("edit.redo");
     await refreshState();
   }));
-  el("fit_photo").addEventListener("click", () => submit(() => call("view.zoomFit")));
+  const runZoomAction = name => submit(async () => {
+    photoGestures.reset();
+    await call(name);
+    // A canvas pass applies the Rust viewport change before we snapshot it
+    // for the next GPU-composited touch gesture.
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    await photoGestures.refresh();
+  });
+  el("zoom_out").addEventListener("click", () => runZoomAction("view.zoomOut"));
+  el("zoom_in").addEventListener("click", () => runZoomAction("view.zoomIn"));
+  el("fit_photo").addEventListener("click", () => runZoomAction("view.zoomFit"));
   el("compare_photo").addEventListener("click", () => submit(() => call("view.beforeAfter")));
   el("auto_correct").addEventListener("click", () => submit(async () => {
     await call("develop.auto");

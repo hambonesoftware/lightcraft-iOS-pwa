@@ -83,6 +83,10 @@ test("mobile layout honors device safe areas and reserves the photo canvas", () 
   assert.match(css, /env\(safe-area-inset-top/);
   assert.match(css, /env\(safe-area-inset-bottom/);
   assert.match(css, /#lightcraft_canvas\s*\{/);
+  assert.match(css, /#lightcraft_viewport\s*\{/);
+  assert.match(html, /id="lightcraft_viewport"/);
+  assert.match(html, /id="zoom_in"/);
+  assert.match(html, /id="zoom_out"/);
   assert.match(css, /touch-action: none/);
   assert.match(css, /@media \(max-height: 620px\)/);
   assert.match(html, /role="tablist"/);
@@ -100,6 +104,9 @@ test("prototype does not contain a second fake image editing pipeline", () => {
   const js = readFileSync(new URL("../apps/lightcraft-web/mobile-lab.mjs", import.meta.url), "utf8");
   assert.match(js, /call\("develop\.set"/);
   assert.match(js, /call\("develop\.beginInteraction"/);
+  assert.match(js, /createLatestValueScheduler/);
+  assert.match(js, /mountPhotoGestures/);
+  assert.doesNotMatch(js, /setTimeout\(\(\) =>\s*\{\s*delayed/);
   assert.match(js, /call\("develop\.endInteraction"/);
   assert.match(js, /call\("library\.select"/);
   assert.match(js, /call\("develop\.controls"/);
@@ -126,6 +133,10 @@ test("PWA prepares a full Rust ZIP but requires separate user Save to Files acti
   assert.match(safety, /fn deliver_backup\(name: &str, blob: &web_sys::Blob\)/);
   assert.match(safety, /deliver_backup\(&format!/);
   assert.match(build, /"backup-files\.mjs"/);
+  assert.match(build, /"mobile-performance\.mjs"/);
+  assert.match(build, /"mobile-gestures\.mjs"/);
+  assert.match(sw, /"\.\/mobile-gestures\.mjs"/);
+  assert.match(rust, /"web\.viewport"/);
   assert.match(sw, /"\.\/backup-files\.mjs"/);
   assert.match(css, /\.backup-ready\[hidden\]/);
 });

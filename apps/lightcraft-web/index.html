@@ -15,7 +15,9 @@
   <link rel="stylesheet" href="./mobile-lab.css">
 </head>
 <body>
-  <canvas id="lightcraft_canvas" aria-label="LightCraft photograph viewer"></canvas>
+  <div id="lightcraft_viewport" aria-label="Photo viewing area">
+    <canvas id="lightcraft_canvas" aria-label="LightCraft photograph viewer"></canvas>
+  </div>
   <div id="lightcraft_loading" role="status">Preparing your local photo studio…</div>
   <div id="lightcraft_status" aria-live="polite" class="sr-only"></div>
 
@@ -54,7 +56,9 @@
       <span id="current_photo" class="photo-name">No photo selected</span>
       <div class="photo-actions">
         <button id="compare_photo" type="button">Before / After</button>
+        <button id="zoom_out" class="zoom-step" type="button" aria-label="Zoom out" title="Zoom out">−</button>
         <button id="fit_photo" type="button">Fit</button>
+        <button id="zoom_in" class="zoom-step" type="button" aria-label="Zoom in" title="Zoom in">+</button>
       </div>
     </div>
 
