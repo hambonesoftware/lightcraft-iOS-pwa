@@ -191,8 +191,35 @@ fn open_picker(originals: Originals, backend: Option<Backend>, ctx: egui::Contex
     input.click();
 }
 
-/// Offer `bytes` as a download named after `path`.
+/// Export pixels to native Documents/LightCraft/exports in the installed iOS
+/// application. The web-only variant keeps its regular browser download.
+/// The write is async because Capacitor communicates with Swift over a bridge;
+/// the mobile UI reports success/failure only after native disk I/O completes.
 fn download(path: &str, bytes: &[u8]) -> Result<(), String> {
+    if window().and_then(|w| w.location().protocol().ok()).is_some_and(|p| p == "capacitor:") {
+        let filename = download_name(path).to_string();
+        let key = format!("exports/{filename}");
+        let bytes = bytes.to_vec();
+        wasm_bindgen_futures::spawn_local(async move {
+            let result = match Backend::open(false).await {
+                Ok(backend) if backend.kind() == "native" => backend.write(&key, &bytes).await,
+                Ok(_) => Err("refusing to export into browser storage inside the native app".into()),
+                Err(error) => Err(error),
+            };
+            let message = match result {
+                Ok(()) => format!("Saved {filename} in Files › On My iPhone › LightCraft Local › LightCraft › exports"),
+                Err(error) => format!("Native photo export FAILED: {error}. Keep your original photo and retry."),
+            };
+            if let Ok(status) = js_sys::Reflect::get(&js_sys::global(), &"lightcraftNativeExportStatus".into())
+                && let Some(show) = status.dyn_ref::<js_sys::Function>()
+            {
+                let _ = show.call1(&JsValue::NULL, &message.into());
+            } else {
+                set_status(&message);
+            }
+        });
+        return Ok(());
+    }
     let e = |e: JsValue| format!("download failed: {e:?}");
     let arr = js_sys::Array::of1(&js_sys::Uint8Array::from(bytes));
     let opts = web_sys::BlobPropertyBag::new();
