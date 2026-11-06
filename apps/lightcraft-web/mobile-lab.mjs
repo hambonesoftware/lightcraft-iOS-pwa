@@ -10,6 +10,7 @@
 import { createBackupHandoff } from "./backup-files.mjs";
 import { mountSavedPhotosUI } from "./saved-photos-ui.mjs";
 import { createLatestValueScheduler } from "./mobile-performance.mjs";
+import { mountPhotoGestures } from "./mobile-gestures.mjs";
 
 export const CATEGORY_SECTIONS = Object.freeze({
   looks: [],
@@ -105,6 +106,13 @@ export function mountMobileStudio({ command, importBrowserFiles, restoreBrowserB
   // The ZIP is staged by Rust; the next actual button tap opens iOS Share,
   // preserving Safari's transient user activation.
   globalThis.lightcraftReceiveBackup = (blob, filename) => backupHandoff.stage(blob, filename);
+  const photoGestures = mountPhotoGestures({
+    canvas: el("lightcraft_canvas"),
+    viewport: el("lightcraft_viewport"),
+    call,
+    activePhoto: () => activeId !== null,
+    onError: error => notify("Could not update zoom: " + String(error))
+  });
   const savedPhotosUI = mountSavedPhotosUI({
     call,
     getSelectedPhoto: () => catalog.find(photo => photo.id === activeId),
@@ -443,6 +451,7 @@ export function mountMobileStudio({ command, importBrowserFiles, restoreBrowserB
     presets = Array.isArray(availablePresets) ? availablePresets : [];
     renderLibrary();
     renderControls();
+    if (activeId !== null) photoGestures.refresh().catch(() => {});
   }
 
   async function waitForWasmReady() {
@@ -572,7 +581,17 @@ export function mountMobileStudio({ command, importBrowserFiles, restoreBrowserB
     await call("edit.redo");
     await refreshState();
   }));
-  el("fit_photo").addEventListener("click", () => submit(() => call("view.zoomFit")));
+  const runZoomAction = name => submit(async () => {
+    photoGestures.reset();
+    await call(name);
+    // A canvas pass applies the Rust viewport change before we snapshot it
+    // for the next GPU-composited touch gesture.
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    await photoGestures.refresh();
+  });
+  el("zoom_out").addEventListener("click", () => runZoomAction("view.zoomOut"));
+  el("zoom_in").addEventListener("click", () => runZoomAction("view.zoomIn"));
+  el("fit_photo").addEventListener("click", () => runZoomAction("view.zoomFit"));
   el("compare_photo").addEventListener("click", () => submit(() => call("view.beforeAfter")));
   el("auto_correct").addEventListener("click", () => submit(async () => {
     await call("develop.auto");
