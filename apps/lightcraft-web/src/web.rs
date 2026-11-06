@@ -793,6 +793,32 @@ pub fn command(id: String, params: String) -> js_sys::Promise {
 }
 
 impl WebApp {
+    /// Snapshot of the actual egui canvas and image placement. Mobile gestures
+    /// use it to move the existing GPU canvas immediately and commit a single
+    /// accurate zoom/pan change after fingers lift. No RAW/develop render is
+    /// requested for intermediate JavaScript gesture frames.
+    fn web_viewport(&self) -> serde_json::Value {
+        let rect = |r: Option<egui::Rect>| {
+            r.map(|r| json!({"x": r.left(), "y": r.top(), "width": r.width(), "height": r.height()}))
+        };
+        let source = self
+            .app
+            .session
+            .active()
+            .and_then(|id| self.app.session.catalog.photo(id))
+            .map(|p| json!({"width": p.width, "height": p.height}));
+        let ppp = CTX.with(|c| c.borrow().as_ref().map_or(1.0, egui::Context::pixels_per_point));
+        json!({
+            "zoom": self.app.ui.zoom,
+            "pan": self.app.ui.pan,
+            "photo": self.app.session.active(),
+            "canvasRect": rect(self.app.canvas_rect),
+            "imageRect": rect(self.app.image_rect),
+            "source": source,
+            "pixelsPerPoint": ppp
+        })
+    }
+
     fn web_stats(&self) -> serde_json::Value {
         let (alive, ready, remote, inline) = self.workers.as_ref().map_or((0, 0, 0, 0), Workers::stats);
         let (orig_n, orig_bytes) = self.originals.usage();
@@ -817,6 +843,7 @@ impl WebApp {
             let r = match crate::automation::params(&params) {
                 Err(e) => Err(format!("{id}: {e}")),
                 Ok(_) if id == "web.stats" => Ok(self.web_stats()),
+                Ok(_) if id == "web.viewport" => Ok(self.web_viewport()),
                 Ok(params) => self.app.run(&id, params),
             };
             let _ = match r {
