@@ -21,6 +21,31 @@ const context = await browser.newContext({
 const page = await context.newPage();
 const errors = [];
 page.on("pageerror", error => errors.push(String(error)));
+
+/**
+ * Poll the actual asynchronous Rust command, not an async predicate passed
+ * to waitForFunction. This makes failures observable and avoids treating an
+ * unresolved Promise handle as a successful condition.
+ */
+async function pollRust(commandName, params, predicate, timeoutMs = 60000) {
+  const deadline = Date.now() + timeoutMs;
+  let last = null;
+  let lastError = null;
+  while (Date.now() < deadline) {
+    try {
+      last = await page.evaluate(async ({ commandName, params }) =>
+        JSON.parse(await lightcraft.command(commandName, JSON.stringify(params))),
+      { commandName, params });
+      const value = predicate(last);
+      if (value !== false && value !== undefined && value !== null) return value;
+    } catch (error) {
+      lastError = String(error);
+    }
+    await page.waitForTimeout(300);
+  }
+  throw new Error("Timed out checking " + commandName + ": " + JSON.stringify({ params, last, lastError }));
+}
+
 try {
   const response = await page.goto(base + "/mobile-lab.html", { waitUntil: "domcontentloaded", timeout: 90000 });
   assert.equal(response?.status(), 200);
@@ -81,27 +106,11 @@ try {
     mimeType: "image/png",
     buffer: Buffer.from(bytes)
   });
-  const fixtureHandle = await page.waitForFunction(async filename => {
-    try {
-      const result = JSON.parse(await lightcraft.command("catalog.query", JSON.stringify({ filter: {}, limit: 200 })));
-      const match = result.photos.find(photo => photo.fileName === filename);
-      return match?.id ?? false;
-    } catch {
-      return false;
-    }
-  }, fixtureName, { timeout: 60000 });
-  const returnedId = await fixtureHandle.jsonValue();
+  const returnedId = await pollRust("catalog.query", { filter: {}, limit: 200 },
+    result => result.photos.find(photo => photo.fileName === fixtureName)?.id ?? false);
   const fixtureId = typeof returnedId === "string" && /^[0-9]+$/.test(returnedId) ? Number(returnedId) : returnedId;
-  if (!Number.isSafeInteger(fixtureId)) {
-    const diagnostics = await page.evaluate(async () => ({
-      catalog: JSON.parse(await lightcraft.command("catalog.query", JSON.stringify({ filter: {}, limit: 15 }))),
-      state: JSON.parse(await lightcraft.command("library.state", "{}")),
-      browserStatus: document.querySelector("#lightcraft_status")?.textContent,
-      studioVisible: !document.querySelector("#mobile_studio")?.hidden
-    }));
-    console.error("Invalid photo ID from real catalog query:", JSON.stringify({ returnedId, fixtureId, diagnostics }, null, 2));
-    throw new Error("Imported photo did not expose a usable Rust catalog ID");
-  }
+  assert.ok(Number.isSafeInteger(fixtureId), "new photo must have a real Rust catalog ID: " + String(returnedId));
+
   // Choose the imported photo through the mobile library rather than bypassing the UI.
   if (!(await page.locator("#library_dialog").evaluate(dialog => dialog.open))) {
     await page.getByRole("button", { name: "Open photo library" }).click();
@@ -109,10 +118,7 @@ try {
   const fixtureRow = page.locator(".library-item").filter({ hasText: fixtureName });
   await fixtureRow.waitFor({ state: "visible", timeout: 20000 });
   await fixtureRow.click();
-  await page.waitForFunction(async id => {
-    const state = JSON.parse(await lightcraft.command("library.state", "{}"));
-    return state.selection?.active === id;
-  }, fixtureId, { timeout: 20000 });
+  await pollRust("library.state", {}, state => state.selection?.active === fixtureId, 20000);
   await page.locator("#library_dialog").waitFor({ state: "hidden" });
   await page.evaluate(async () => lightcraft.command("view.zoomFit", "{}"));
   await page.getByRole("tab", { name: "Light" }).click();
@@ -145,11 +151,10 @@ try {
     range.dispatchEvent(new Event("input", { bubbles: true }));
     range.dispatchEvent(new Event("change", { bubbles: true }));
   }, next);
-  await page.waitForFunction(async expected => {
-    const values = JSON.parse(await lightcraft.command("develop.controls", JSON.stringify({ section: "light" })));
+  await pollRust("develop.controls", { section: "light" }, values => {
     const actual = values.find(control => control.id === "light.exposure");
-    return actual && Math.abs(actual.value - expected) < 0.00001;
-  }, next, { timeout: 20000 });
+    return actual && Math.abs(actual.value - next) < 0.00001;
+  }, 20000);
   await page.screenshot({ path: reportDir + "/phone-edit.png", fullPage: true });
   await page.evaluate(async () => lightcraft.command("edit.undo", "{}"));
   const undone = await page.evaluate(async () =>
