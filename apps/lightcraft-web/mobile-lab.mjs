@@ -521,7 +521,23 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
     await call("develop.auto");
     await refreshState();
   }));
-  el("export_photo").addEventListener("click", () => submit(() => call("dialog.export")));
+  el("export_photo").addEventListener("click", () => submit(async () => {
+    const photo = catalog.find(item => item.id === activeId);
+    if (!photo) throw new Error("Select a photograph before exporting.");
+    const stem = String(photo.fileName || "LightCraft")
+      .replace(/\.[^.]+$/, "")
+      .replace(/[^a-zA-Z0-9_-]+/g, "-")
+      .slice(0, 80) || "LightCraft";
+    // Use the real export encoder and the existing browser download service.
+    // Do not open the desktop egui export dialog in the mobile application.
+    await call("app.export", {
+      ids: [activeId],
+      path: stem + "-LightCraft.jpg",
+      format: "jpeg",
+      quality: 92
+    });
+    notify("Export prepared. Check your browser downloads or the Files app.");
+  }));
 
   (async () => {
     try {
