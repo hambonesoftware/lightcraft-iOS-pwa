@@ -433,10 +433,8 @@ pub fn show_mobile(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     let end = (start + PER_PAGE).min(items.len());
 
     ui.horizontal_centered(|ui| {
-        if total_pages > 1 {
-            if ui.add_sized([38.0, 44.0], egui::Button::new("‹").frame(false)).clicked() {
-                page = page.saturating_sub(1);
-            }
+        if total_pages > 1 && ui.add_sized([38.0, 44.0], egui::Button::new("‹").frame(false)).clicked() {
+            page = page.saturating_sub(1);
         }
         let available = ui.available_width() - if total_pages > 1 { 38.0 } else { 0.0 };
         egui::ScrollArea::horizontal().id_salt(("mobile-looks-strip", group_index, page)).max_width(available.max(TILE_W)).show(ui, |ui| {
@@ -475,10 +473,8 @@ pub fn show_mobile(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                 }
             });
         });
-        if total_pages > 1 {
-            if ui.add_sized([38.0, 44.0], egui::Button::new("›").frame(false)).clicked() {
-                page = (page + 1).min(total_pages - 1);
-            }
+        if total_pages > 1 && ui.add_sized([38.0, 44.0], egui::Button::new("›").frame(false)).clicked() {
+            page = (page + 1).min(total_pages - 1);
         }
     });
     if total_pages > 1 {
