@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#191a1d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>LightCraft • Mobile Studio Prototype</title>
+  <meta name="description" content="An experimental touch-native LightCraft photo editing workspace powered by the real local Rust/WASM engine.">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./mobile-lab.css">
+</head>
+<body>
+  <canvas id="lightcraft_canvas" aria-label="LightCraft photograph viewer"></canvas>
+  <div id="lightcraft_loading" role="status">Preparing your local photo studio…</div>
+  <div id="lightcraft_status" aria-live="polite" class="sr-only"></div>
+
+  <div id="mobile_studio" hidden>
+    <header class="studio-header" aria-label="Photo editor toolbar">
+      <button id="open_library" class="top-action" type="button" aria-label="Open photo library">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+        <span>Library</span>
+      </button>
+      <strong class="brand">LIGHTCRAFT <span>STUDIO</span></strong>
+      <div class="header-actions">
+        <button id="undo" class="icon-action" type="button" aria-label="Undo" title="Undo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-2"/></svg>
+        </button>
+        <button id="redo" class="icon-action" type="button" aria-label="Redo" title="Redo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h2"/></svg>
+        </button>
+        <button id="export_photo" class="icon-action" type="button" aria-label="Export photo" title="Export">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m0 0L7 8m5-5 5 5"/><path d="M5 14v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="photo-footer" aria-label="Photograph actions">
+      <span id="current_photo" class="photo-name">No photo selected</span>
+      <div class="photo-actions">
+        <button id="compare_photo" type="button">Before / After</button>
+        <button id="fit_photo" type="button">Fit</button>
+      </div>
+    </div>
+
+    <section class="edit-console" aria-label="Mobile editing controls">
+      <div class="grabber" aria-hidden="true"></div>
+      <div class="console-heading">
+        <div>
+          <span class="eyebrow">ADJUSTMENTS</span>
+          <h1 id="panel_title">Light</h1>
+        </div>
+        <button id="auto_correct" class="auto-button" type="button">Auto</button>
+      </div>
+      <div id="adjustment_controls" class="adjustment-scroller" aria-label="Photo adjustments"></div>
+      <nav id="category_tabs" class="category-tabs" role="tablist" aria-label="Editing categories">
+        <button role="tab" aria-selected="true" data-category="light">Light</button>
+        <button role="tab" aria-selected="false" data-category="color">Color</button>
+        <button role="tab" aria-selected="false" data-category="effects">Effects</button>
+        <button role="tab" aria-selected="false" data-category="detail">Detail</button>
+        <button role="tab" aria-selected="false" data-category="optics">Optics</button>
+      </nav>
+    </section>
+
+    <dialog id="library_dialog" class="library-dialog" aria-label="Local photo library">
+      <div class="dialog-header">
+        <div>
+          <span class="eyebrow">ON THIS DEVICE</span>
+          <h2>Photo library</h2>
+        </div>
+        <button id="close_library" class="close-button" type="button" aria-label="Close library">Done</button>
+      </div>
+      <p class="privacy-caption">Your original photos and edits stay in LightCraft’s existing browser storage. Back up important libraries from the original editor.</p>
+      <button id="import_photo" type="button" class="import-button">+ Import photographs</button>
+      <div id="library_count" class="library-count" role="status"></div>
+      <div id="library_items" class="library-items"></div>
+    </dialog>
+    <input id="files_picker" type="file" accept="image/*,.dng,.cr2,.cr3,.nef,.arw,.raf,.rw2,.orf,.pef,.tif,.tiff" multiple hidden>
+    <div id="toast" role="status" aria-live="polite" class="toast" hidden></div>
+  </div>
+
+  <script type="module">
+    import init, { start, command, import_browser_files } from "./lightcraft_web.js";
+    import { mountMobileStudio } from "./mobile-lab.mjs";
+
+    (async () => {
+      const chineseFont = fetch("./lightcraft_zh_hans.otf")
+        .then(async response => response.ok ? new Uint8Array(await response.arrayBuffer()) : new Uint8Array())
+        .catch(() => new Uint8Array());
+      const [module, font] = await Promise.all([
+        WebAssembly.compileStreaming(fetch("./lightcraft_web_bg.wasm")),
+        chineseFont
+      ]);
+      globalThis.lightcraftModule = module;
+      await init({ module_or_path: module });
+      globalThis.lightcraft = { command };
+      start(font);
+      mountMobileStudio({ command, importBrowserFiles: import_browser_files });
+    })().catch(error => {
+      console.error(error);
+      document.getElementById("lightcraft_loading").textContent = "Could not open LightCraft Studio: " + String(error);
+    });
+  </script>
+</body>
+</html>
