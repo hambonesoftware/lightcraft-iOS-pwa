@@ -27,7 +27,7 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Test PWA offline shell and storage isolation
-        run: node --test tests/pwa.test.mjs tests/mobile-lab.test.mjs
+        run: node --test tests/pwa.test.mjs tests/mobile-lab.test.mjs tests/native-storage.test.mjs
 
       - name: Cache Rust builds
         uses: Swatinem/rust-cache@v2
