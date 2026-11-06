@@ -568,8 +568,8 @@ mod tests {
         let ctx = Context::default();
         let screen = Rect::from_min_size(pos2(0.0, 0.0), vec2(393.0, 800.0));
         let input = RawInput { screen_rect: Some(screen), ..Default::default() };
-        let output = ctx.run_pass(input, |ctx| {
-            egui::CentralPanel::default().show(ctx, |ui| {
+        let output = ctx.run_ui(input, |ui| {
+            egui::CentralPanel::default().show(ui, |ui| {
                 let sheet = Rect::from_min_size(pos2(0.0, 400.0), vec2(393.0, 260.0));
                 region(ui, "test_mobile_inspector", sheet, Color32::BLACK, vec2(8.0, 4.0), |ui| {
                     let title = ui.horizontal(|ui| {
