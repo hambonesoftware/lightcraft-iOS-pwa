@@ -24,7 +24,10 @@ page.on("pageerror", error => errors.push(String(error)));
 try {
   const response = await page.goto(base + "/mobile-lab.html", { waitUntil: "domcontentloaded", timeout: 90000 });
   assert.equal(response?.status(), 200);
-  await page.locator("#mobile_studio").waitFor({ state: "visible", timeout: 120000 });
+  // The wrapper has no own box (all its content is fixed-position), so
+  // Playwright considers that wrapper invisible even while its UI is rendered.
+  await page.locator(".studio-header").waitFor({ state: "visible", timeout: 120000 });
+  assert.equal(await page.locator("#mobile_studio").evaluate(el => el.hidden), false);
   await page.waitForFunction(() => !!globalThis.lightcraft?.command, { timeout: 30000 });
 
   // The photo viewer must have a nonzero, nonoverlapping layout in a phone viewport.
@@ -52,6 +55,54 @@ try {
   assert.ok(state && state.selection, "expected the real Rust library state");
   const controls = await page.evaluate(async () => JSON.parse(await lightcraft.command("develop.controls", "{}")));
   assert.ok(Array.isArray(controls), "real engine should expose adjustment definitions");
+
+  // Import a genuine generated PNG through the real DOM file input and Rust
+  // Originals/OPFS pipeline. This prevents a misleading pass on an empty
+  // library where no actual corrections were tested.
+  const bytes = await page.evaluate(async () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 168;
+    const drawing = canvas.getContext("2d");
+    drawing.fillStyle = "#34445e";
+    drawing.fillRect(0, 0, 256, 168);
+    drawing.fillStyle = "#d4a075";
+    drawing.fillRect(0, 108, 256, 60);
+    drawing.fillStyle = "#f8dca2";
+    drawing.beginPath();
+    drawing.arc(184, 53, 24, 0, Math.PI * 2);
+    drawing.fill();
+    const png = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+    return Array.from(new Uint8Array(await png.arrayBuffer()));
+  });
+  const fixtureName = "lightcraft-studio-ci-fixture.png";
+  await page.locator("#files_picker").setInputFiles({
+    name: fixtureName,
+    mimeType: "image/png",
+    buffer: Buffer.from(bytes)
+  });
+  await page.waitForFunction(async filename => {
+    try {
+      const result = JSON.parse(await lightcraft.command("catalog.query", JSON.stringify({ limit: 200 })));
+      return result.photos.some(photo => photo.fileName === filename);
+    } catch {
+      return false;
+    }
+  }, fixtureName, { timeout: 60000 });
+  const fixture = await page.evaluate(async filename => {
+    const data = JSON.parse(await lightcraft.command("catalog.query", JSON.stringify({ limit: 200 })));
+    return data.photos.find(photo => photo.fileName === filename);
+  }, fixtureName);
+  assert.ok(Number.isSafeInteger(fixture.id), "new photo must have a real Rust catalog ID");
+  await page.evaluate(async id => {
+    await lightcraft.command("library.select", JSON.stringify({ ids: [id], active: id }));
+    await lightcraft.command("view.zoomFit", "{}");
+  }, fixture.id);
+  // A new empty library opens its native library sheet automatically.
+  if (await page.locator("#library_dialog").evaluate(dialog => dialog.open)) {
+    await page.getByRole("button", { name: "Close library" }).click();
+  }
+  await page.getByRole("tab", { name: "Light" }).click();
   await page.screenshot({ path: reportDir + "/phone-light.png", fullPage: true });
 
   await page.getByRole("tab", { name: "Color" }).click();
@@ -63,38 +114,35 @@ try {
   await page.getByRole("dialog", { name: "Local photo library" }).waitFor({ state: "visible" });
   await page.screenshot({ path: reportDir + "/phone-library.png", fullPage: true });
 
-  const availablePhotos = await page.evaluate(async () =>
-    JSON.parse(await lightcraft.command("catalog.query", JSON.stringify({ limit: 5 }))));
-  assert.ok(Array.isArray(availablePhotos.photos));
-  if (availablePhotos.photos.length > 0) {
-    const id = availablePhotos.photos[0].id;
-    await page.evaluate(async id => {
-      await lightcraft.command("library.select", JSON.stringify({ ids: [id], active: id }));
-      await lightcraft.command("view.zoomFit", "{}");
-    }, id);
-    await page.getByRole("button", { name: "Close library" }).click();
-    await page.getByRole("tab", { name: "Light" }).click();
-    await page.waitForTimeout(600);
-    const exposure = page.locator('input[aria-label="Exposure"]');
-    if (await exposure.count()) {
-      const before = await page.evaluate(async () => JSON.parse(await lightcraft.command("develop.controls", JSON.stringify({section:"light"}))));
-      const current = before.find(c => c.id === "light.exposure");
-      if (current && current.min < current.max) {
-        // Test the real engine, independent of the UI's numeric formatting.
-        const next = Math.min(current.max, Math.max(current.min, current.value + (current.step || 0.1)));
-        await page.evaluate(async next => {
-          await lightcraft.command("develop.beginInteraction", JSON.stringify({ label: "Exposure" }));
-          await lightcraft.command("develop.set", JSON.stringify({ control: "light.exposure", value: next }));
-          await lightcraft.command("develop.endInteraction", "{}");
-        }, next);
-        const after = await page.evaluate(async () => JSON.parse(await lightcraft.command("develop.controls", JSON.stringify({section:"light"}))));
-        const changed = after.find(c => c.id === "light.exposure");
-        assert.ok(changed && Math.abs(changed.value - next) < 0.00001, "Rust engine must apply exposure");
-        await page.evaluate(async () => lightcraft.command("edit.undo", "{}"));
-      }
-      await page.screenshot({ path: reportDir + "/phone-edit.png", fullPage: true });
-    }
-  }
+  // Verify the *HTML range event* reaches the actual Rust pipeline, updates
+  // the selected photo and can be undone. Direct command calls alone would
+  // miss the mobile UI integration we are trying to validate.
+  await page.getByRole("button", { name: "Close library" }).click();
+  await page.getByRole("tab", { name: "Light" }).click();
+  const exposure = page.locator('input[aria-label="Exposure"]');
+  await exposure.waitFor({ state: "visible", timeout: 20000 });
+  const before = await page.evaluate(async () =>
+    JSON.parse(await lightcraft.command("develop.controls", JSON.stringify({ section: "light" }))));
+  const current = before.find(control => control.id === "light.exposure");
+  assert.ok(current && current.min < current.max, "fixture must expose real exposure");
+  const proposed = Math.min(current.max, Math.max(current.min, current.value + Math.max(current.step || 0.1, 0.25)));
+  const next = Number(proposed.toFixed(2));
+  await exposure.evaluate((range, newValue) => {
+    range.value = String(newValue);
+    range.dispatchEvent(new Event("input", { bubbles: true }));
+    range.dispatchEvent(new Event("change", { bubbles: true }));
+  }, next);
+  await page.waitForFunction(async expected => {
+    const values = JSON.parse(await lightcraft.command("develop.controls", JSON.stringify({ section: "light" })));
+    const actual = values.find(control => control.id === "light.exposure");
+    return actual && Math.abs(actual.value - expected) < 0.00001;
+  }, next, { timeout: 20000 });
+  await page.screenshot({ path: reportDir + "/phone-edit.png", fullPage: true });
+  await page.evaluate(async () => lightcraft.command("edit.undo", "{}"));
+  const undone = await page.evaluate(async () =>
+    JSON.parse(await lightcraft.command("develop.controls", JSON.stringify({ section: "light" }))));
+  const reverted = undone.find(control => control.id === "light.exposure");
+  assert.ok(reverted && Math.abs(reverted.value - current.value) < 0.00001, "Undo restores original exposure");
   assert.deepEqual(errors, [], "browser page should not raise unhandled JavaScript errors");
   console.log("Mobile Studio browser smoke passed; screenshots in " + reportDir);
 } finally {
