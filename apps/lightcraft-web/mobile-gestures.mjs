@@ -203,7 +203,19 @@ export function mountPhotoGestures({
     resetTransform();
     ignoreRemaining = event.touches.length > 0;
   }
+  // Eframe also listens for browser PointerEvents. An iPhone fires both
+  // pointer and touch events; without suppressing pointer dispatch the legacy
+  // egui loupe can pan or zoom a second time behind our compositor transform.
+  // Preserve mouse and stylus input unchanged.
+  function preventDuplicatePointer(event) {
+    if (!activePhoto() || event.pointerType !== "touch") return;
+    event.stopImmediatePropagation();
+    if (event.cancelable) event.preventDefault();
+  }
   const options = { passive: false, capture: true };
+  for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel"]) {
+    canvas.addEventListener(type, preventDuplicatePointer, options);
+  }
   canvas.addEventListener("touchstart", begin, options);
   canvas.addEventListener("touchmove", move, options);
   canvas.addEventListener("touchend", finish, options);
