@@ -495,9 +495,17 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
   el("close_library").addEventListener("click", () => libraryDialog.close());
   el("import_photo").addEventListener("click", () => el("files_picker").click());
   el("backup_library").addEventListener("click", () => {
-    notify("Preparing a full library backup. Save the downloaded file somewhere safe.");
-    submit(() => call("file.backupLibrary"));
+    submit(async () => {
+      const stats = await call("web.stats");
+      notify(stats?.storage === "native"
+        ? "Preparing backup in Files › On My iPhone › LightCraft Local › LightCraft › backups…"
+        : "Preparing a full library backup. Save the downloaded ZIP somewhere safe.");
+      await call("file.backupLibrary");
+    });
   });
+  el("restore_library").addEventListener("click", () =>
+    submit(() => call("file.restoreLibrary")));
+
 
   // Call WASM during a native file input change, not inside a future command
   // turn: this retains a genuine user file-selection gesture on iOS.
