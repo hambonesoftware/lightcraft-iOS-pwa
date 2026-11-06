@@ -241,6 +241,7 @@ fn correction_category(app: &mut LightcraftApp, state: &mut MobileState, categor
 }
 
 fn navigation(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileState) {
+    let had_look_preview = state.drawer == Drawer::Presets;
     let has_photo = app.session.active().is_some();
     let detail = app.ui.view == ViewMode::Detail;
     // Library remains reachable while the correction categories scroll under
@@ -275,6 +276,10 @@ fn navigation(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileStat
             });
         });
     });
+    if had_look_preview && state.drawer != Drawer::Presets {
+        super::presets::clear_mobile_preview(ui.ctx());
+        app.hover_preview = None;
+    }
 }
 
 fn more_action(app: &mut LightcraftApp, ui: &mut egui::Ui, label: &str, enabled: bool, command: &str) {
@@ -327,16 +332,20 @@ fn drawer(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileState) {
             RightPanel::RedEye => "Red Eye",
             RightPanel::None => "Tools",
         },
-        Drawer::Presets => "Presets",
+        Drawer::Presets => "Looks",
         Drawer::More => "More Tools",
     };
     ui.horizontal_centered(|ui| {
         ui.label(egui::RichText::new(title).strong().size(15.0));
         ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-            if ui.add_sized([60.0, 44.0], egui::Button::new("Done")).clicked() {
+            if ui.add_sized([60.0, 44.0], egui::Button::new("Done").frame(false)).clicked() {
+                if state.drawer == Drawer::Presets {
+                    super::presets::clear_mobile_preview(ui.ctx());
+                    app.hover_preview = None;
+                }
                 close_drawer(app, state);
             }
-            if ui.add_sized([68.0, 44.0], egui::Button::new(if state.expanded { "Smaller" } else { "Expand" })).clicked() {
+            if ui.add_sized([68.0, 44.0], egui::Button::new(if state.expanded { "Reduce" } else { "Expand" }).frame(false)).clicked() {
                 state.expanded = !state.expanded;
             }
         });
@@ -454,7 +463,9 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
         0.0
     } else {
         let base = drawer_height(space, state.expanded);
-        (base + if previewing && !state.expanded { 30.0 } else { 0.0 }).min((space - 100.0).max(0.0))
+        // A selected look reveals a strength slider and Apply/Cancel row:
+        // grow the inspector rather than letting those buttons clip.
+        (base + if previewing && !state.expanded { 80.0 } else { 0.0 }).min((space - 100.0).max(0.0))
     };
     let sheet_top = content_bottom - sheet_h;
     if state.drawer != Drawer::Closed && sheet_h > 0.0 {
