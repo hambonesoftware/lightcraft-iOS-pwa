@@ -3,74 +3,125 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#1c1c1c">
+  <meta name="theme-color" content="#191a1d">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>LightCraft Local • Studio</title>
+  <meta name="description" content="LightCraft Local: a touch-first, on-device photo editing studio powered by Rust.">
   <meta name="apple-mobile-web-app-title" content="LightCraft Local">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" href="./icon-256.png">
-  <title>LightCraft</title>
-  <link rel="icon" href="data:,">
-  <meta name="description" content="LightCraft: open-source photo library and raw developer, running in your browser (WASM).">
-  <style>
-    :root { color-scheme: dark; }
-    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #1c1c1c; overscroll-behavior: none; }
-    body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-    input, textarea { font-size: 16px; -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
-    canvas#lightcraft_canvas { touch-action: none; }
-    canvas#lightcraft_canvas {
-      position: absolute;
-      top: env(safe-area-inset-top, 0px);
-      right: env(safe-area-inset-right, 0px);
-      bottom: env(safe-area-inset-bottom, 0px);
-      left: env(safe-area-inset-left, 0px);
-      width: calc(100% - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
-      height: calc(100% - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
-      display: block;
-    }
-    #lightcraft_loading {
-      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-      color: #b8b8b8; font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; pointer-events: none;
-    }
-    #lightcraft_status { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; overflow: hidden; }
-  </style>
+  <link rel="icon" href="./icon-256.png">
+  <link rel="stylesheet" href="./mobile-lab.css">
 </head>
 <body>
-  <canvas id="lightcraft_canvas"></canvas>
-  <div id="lightcraft_loading">Loading LightCraft…</div>
-  <div id="lightcraft_status" aria-live="polite"></div>
+  <canvas id="lightcraft_canvas" aria-label="LightCraft photograph viewer"></canvas>
+  <div id="lightcraft_loading" role="status">Preparing your local photo studio…</div>
+  <div id="lightcraft_status" aria-live="polite" class="sr-only"></div>
+
+  <div id="mobile_studio" hidden>
+    <div id="mobile_notice" class="mobile-notice" role="status" hidden>
+      <button id="mobile_notice_open" type="button" aria-haspopup="dialog">
+        <span aria-hidden="true">!</span> LightCraft notice · Details
+      </button>
+    </div>
+    <dialog id="mobile_notice_dialog" class="notice-dialog" aria-label="LightCraft notice details">
+      <h2>Important library notice</h2>
+      <p id="mobile_notice_text"></p>
+      <button id="mobile_notice_close" type="button">I understand</button>
+    </dialog>
+    <header class="studio-header" aria-label="Photo editor toolbar">
+      <button id="open_library" class="top-action" type="button" aria-label="Open photo library">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+        <span>Library</span>
+      </button>
+      <strong class="brand">LIGHTCRAFT <span>STUDIO</span></strong>
+      <div class="header-actions">
+        <button id="undo" class="icon-action" type="button" aria-label="Undo" title="Undo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-2"/></svg>
+        </button>
+        <button id="redo" class="icon-action" type="button" aria-label="Redo" title="Redo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h2"/></svg>
+        </button>
+        <button id="export_photo" class="icon-action" type="button" aria-label="Export photo" title="Export">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m0 0L7 8m5-5 5 5"/><path d="M5 14v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="photo-footer" aria-label="Photograph actions">
+      <span id="current_photo" class="photo-name">No photo selected</span>
+      <div class="photo-actions">
+        <button id="compare_photo" type="button">Before / After</button>
+        <button id="fit_photo" type="button">Fit</button>
+      </div>
+    </div>
+
+    <section class="edit-console" aria-label="Mobile editing controls">
+      <button id="panel_toggle" type="button" class="grabber-button" aria-label="Collapse adjustments" aria-expanded="true"><span class="grabber" aria-hidden="true"></span></button>
+      <div class="console-heading">
+        <div>
+          <span class="eyebrow">ADJUSTMENTS</span>
+          <h1 id="panel_title">Light</h1>
+        </div>
+        <button id="auto_correct" class="auto-button" type="button">Auto</button>
+      </div>
+      <div id="adjustment_controls" class="adjustment-scroller" aria-label="Photo adjustments"></div>
+      <nav id="category_tabs" class="category-tabs" role="tablist" aria-label="Editing categories">
+        <button role="tab" aria-selected="false" data-category="looks" tabindex="-1">Looks</button>
+        <button role="tab" aria-selected="true" data-category="light" tabindex="0">Light</button>
+        <button role="tab" aria-selected="false" data-category="color">Color</button>
+        <button role="tab" aria-selected="false" data-category="effects">Effects</button>
+        <button role="tab" aria-selected="false" data-category="detail">Detail</button>
+        <button role="tab" aria-selected="false" data-category="optics">Optics</button>
+      </nav>
+    </section>
+
+    <dialog id="library_dialog" class="library-dialog" aria-label="Local photo library">
+      <div class="dialog-header">
+        <div>
+          <span class="eyebrow">ON THIS DEVICE</span>
+          <h2>Photo library</h2>
+        </div>
+        <button id="close_library" class="close-button" type="button" aria-label="Close library">Done</button>
+      </div>
+      <p class="privacy-caption">Your original photos and edits stay in LightCraft’s existing browser storage. Back up important photographs regularly; clearing browser website data can delete the local library.</p>
+      <button id="import_photo" type="button" class="import-button">+ Import photographs</button>
+      <div id="library_count" class="library-count" role="status"></div>
+      <div id="library_items" class="library-items"></div>
+    </dialog>
+    <input id="files_picker" type="file" accept="image/*,.dng,.cr2,.cr3,.nef,.arw,.raf,.rw2,.orf,.pef,.tif,.tiff" multiple hidden>
+    <div id="toast" role="status" aria-live="polite" class="toast" hidden></div>
+  </div>
+
   <script>
-    // The static application shell can be available offline after its first successful install.
-    // User photo data remains in LightCraft's OPFS/IndexedDB catalog, not in the SW cache.
     if ("serviceWorker" in navigator && window.isSecureContext) {
       window.addEventListener("load", () => {
         navigator.serviceWorker.register("./sw.js", { scope: "./" })
-          .catch(error => console.warn("Offline app installation unavailable:", error));
+          .catch(error => console.warn("Offline installation unavailable:", error));
       });
     }
   </script>
   <script type="module">
-    import init, { start, command } from "./lightcraft_web.js";
+    import init, { start, command, import_browser_files } from "./lightcraft_web.js";
+    import { mountMobileStudio } from "./mobile-lab.mjs";
+
     (async () => {
-      // The Chinese font is a separate file: embedding it would exceed the host's WASM size limit.
-      // Font-free development builds can still run, with the same missing-glyph warning as before.
       const chineseFont = fetch("./lightcraft_zh_hans.otf")
         .then(async response => response.ok ? new Uint8Array(await response.arrayBuffer()) : new Uint8Array())
         .catch(() => new Uint8Array());
-      // Compile once; the render workers (worker.js) instantiate the same compiled module.
       const [module, font] = await Promise.all([
         WebAssembly.compileStreaming(fetch("./lightcraft_web_bg.wasm")),
-        chineseFont,
+        chineseFont
       ]);
       globalThis.lightcraftModule = module;
       await init({ module_or_path: module });
-      // automation: `await lightcraft.command("library.info", "{}")` → JSON text
       globalThis.lightcraft = { command };
       start(font);
-    })().catch((e) => {
-      console.error(e);
-      const el = document.getElementById("lightcraft_loading");
-      if (el) el.textContent = "LightCraft failed to load: " + e;
+      mountMobileStudio({ command, importBrowserFiles: import_browser_files });
+    })().catch(error => {
+      console.error(error);
+      document.getElementById("lightcraft_loading").textContent = "Could not open LightCraft Studio: " + String(error);
     });
   </script>
 </body>
