@@ -10,7 +10,7 @@
   --accent: #e6b582;
   --accent-dim: rgba(230,181,130,.14);
   --header-height: 58px;
-  --sheet-height: 298px;
+  --sheet-height: 242px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
@@ -29,12 +29,20 @@ button:disabled { opacity: .3; cursor: not-allowed; }
   position: fixed; inset: 0; z-index: 18; display: flex; align-items: center; justify-content: center;
   background: var(--background); color: var(--muted); padding: 32px; text-align: center;
 }
-#lightcraft_canvas {
-  display: block; position: fixed; left: 0; width: 100%;
+#lightcraft_viewport {
+  position: fixed; left: 0; right: 0;
   top: calc(var(--safe-top) + var(--header-height));
   bottom: calc(var(--safe-bottom) + var(--sheet-height) + 34px);
-  height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - var(--header-height) - var(--sheet-height) - 34px);
+  background: #191a1d;
+  overflow: hidden;
+  contain: layout paint;
+}
+#lightcraft_canvas {
+  display: block; position: absolute; inset: 0;
+  width: 100%; height: 100%;
   touch-action: none; background: #191a1d;
+  /* will-change is only enabled during a gesture: an always-layered Retina
+     WebGL canvas wastes substantial iPhone texture memory. */
 }
 #mobile_studio[hidden] { display: none; }
 .mobile-notice[hidden] { display: none; }
@@ -92,8 +100,8 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   display: flex; align-items: center; gap: 10px; justify-content: space-between;
   background: #1c1d21; padding: 0 calc(15px + var(--safe-right)) 0 calc(15px + var(--safe-left)); border-top: 1px solid var(--line);
 }
-.photo-name { font-size: 11px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--muted); max-width: 53%; }
-.photo-actions { display: flex; gap: 11px; flex-shrink: 0; }
+.photo-name { font-size: 11px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--muted); max-width: 39%; min-width: 0; }
+.photo-actions { display: flex; gap: 9px; flex-shrink: 0; align-items: center; }
 .photo-actions button { background: transparent; border: 0; color: var(--muted); font-size: 11px; padding: 6px 1px; }
 .edit-console {
   z-index: 5; position: fixed; left: 0; right: 0; bottom: 0;
@@ -399,3 +407,19 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   font-size: 11px;
 }
 .saved-pool-dialog { max-height: min(86dvh, 820px); }
+
+/* Dedicated zoom stepping is discoverable even without a successful pinch.
+   Actual freehand gestures run on the compositor and commit to Rust on release. */
+.photo-actions .zoom-step {
+  font-size: 24px;
+  line-height: 1;
+  width: 32px;
+  height: 32px;
+  font-weight: 400;
+  text-align: center;
+  touch-action: manipulation;
+}
+@media (max-width: 375px) {
+  .photo-name { max-width: 29%; }
+  .photo-actions { gap: 6px; }
+}
