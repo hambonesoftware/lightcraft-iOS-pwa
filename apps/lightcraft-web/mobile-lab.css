@@ -280,3 +280,25 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   background: rgba(230,181,130,.075); color: var(--accent);
   font-size: 13px; font-weight: 650;
 }
+
+/* Backups are not independent of WebKit until saved into iPhone Files. */
+.backup-ready {
+  padding: 10px 12px 14px;
+  margin-top: 12px;
+  border: 1px solid rgba(230,181,130,.38);
+  border-radius: 13px;
+  background: rgba(230,181,130,.065);
+}
+.backup-ready[hidden] { display: none; }
+.backup-ready > p:first-child {
+  margin: 0 0 9px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.backup-ready .privacy-caption { margin: 12px 0 0; }
+.backup-primary {
+  background: var(--accent);
+  color: #242019;
+  font-weight: 740;
+}
