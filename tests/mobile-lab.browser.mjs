@@ -47,7 +47,7 @@ async function pollRust(commandName, params, predicate, timeoutMs = 60000) {
 }
 
 try {
-  const response = await page.goto(base + "/mobile-lab.html", { waitUntil: "domcontentloaded", timeout: 90000 });
+  const response = await page.goto(base + "/", { waitUntil: "domcontentloaded", timeout: 90000 });
   assert.equal(response?.status(), 200);
   // The wrapper has no own box (all its content is fixed-position), so
   // Playwright considers that wrapper invisible even while its UI is rendered.
@@ -177,6 +177,16 @@ try {
   await page.getByRole("tab", { name: "Color" }).click();
   assert.equal(await page.getByRole("tab", { name: "Color" }).getAttribute("aria-selected"), "true");
   await page.screenshot({ path: reportDir + "/phone-color.png", fullPage: true });
+  await page.getByRole("tab", { name: "Looks" }).click();
+  assert.equal(await page.getByRole("tab", { name: "Looks" }).getAttribute("aria-selected"), "true");
+  const looks = await page.evaluate(async () =>
+    JSON.parse(await lightcraft.command("presets.list", "{}")));
+  assert.ok(Array.isArray(looks) && looks.length > 0, "real Rust preset list should be available");
+  const firstLook = looks[0];
+  const applyLook = page.getByRole("button", { name: "Apply " + firstLook.name, exact: true });
+  await applyLook.waitFor({ state: "visible" });
+  await applyLook.click();
+  await page.screenshot({ path: reportDir + "/phone-looks.png", fullPage: true });
   await page.getByRole("tab", { name: "Effects" }).click();
   assert.equal(await page.getByRole("tab", { name: "Effects" }).getAttribute("aria-selected"), "true");
   await page.getByRole("button", { name: "Open photo library" }).click();
@@ -187,6 +197,12 @@ try {
   // the selected photo and can be undone. Direct command calls alone would
   // miss the mobile UI integration we are trying to validate.
   await page.getByRole("button", { name: "Close library" }).click();
+  await page.locator("#panel_toggle").click();
+  assert.equal(await page.locator("#panel_toggle").getAttribute("aria-expanded"), "false");
+  const immersive = await page.locator("#lightcraft_canvas").evaluate(el => el.getBoundingClientRect().height);
+  assert.ok(immersive >= 350, "collapsing inspector must make room for the photo");
+  await page.locator("#panel_toggle").click();
+  assert.equal(await page.locator("#panel_toggle").getAttribute("aria-expanded"), "true");
   await page.getByRole("tab", { name: "Light" }).click();
   const exposure = page.locator('input[aria-label="Exposure"]');
   await exposure.waitFor({ state: "visible", timeout: 20000 });
