@@ -113,6 +113,7 @@ test("installed iOS app selects Documents storage and does not fall back to OPFS
   assert.match(rust, /b\.kind\(\) == "native"/);
   assert.match(backend, /Backend::Native/);
   assert.match(backend, /native Documents storage bridge failed to initialize/);
-  assert.match(backend, /native_call\("writeAt"/);
+  assert.match(backend, /let method = if offset\.is_some\(\) \{ "writeAt" \}/);
+  assert.match(backend, /native_call\(method,/);
   assert.match(css, /\.storage-status/);
 });
