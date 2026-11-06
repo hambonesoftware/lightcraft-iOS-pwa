@@ -140,6 +140,6 @@ test("mobile shell references the real Rust export hook and does not create fake
   assert.match(html, /Save Image/);
   assert.match(build, /"saved-photos\.mjs"/);
   assert.match(build, /"saved-photos-ui\.mjs"/);
-  assert.match(sw, /"\\.\/saved-photos\.mjs"/);
+  assert.ok(sw.includes('"./saved-photos.mjs"'));
   assert.doesNotMatch(ui, /getImageData|putImageData|canvas\.toDataURL/);
 });
