@@ -81,23 +81,21 @@ try {
     mimeType: "image/png",
     buffer: Buffer.from(bytes)
   });
-  await page.waitForFunction(async filename => {
+  const fixtureHandle = await page.waitForFunction(async filename => {
     try {
       const result = JSON.parse(await lightcraft.command("catalog.query", JSON.stringify({ limit: 200 })));
-      return result.photos.some(photo => photo.fileName === filename);
+      const match = result.photos.find(photo => photo.fileName === filename);
+      return match?.id ?? false;
     } catch {
       return false;
     }
   }, fixtureName, { timeout: 60000 });
-  const fixture = await page.evaluate(async filename => {
-    const data = JSON.parse(await lightcraft.command("catalog.query", JSON.stringify({ limit: 200 })));
-    return data.photos.find(photo => photo.fileName === filename);
-  }, fixtureName);
-  assert.ok(Number.isSafeInteger(fixture.id), "new photo must have a real Rust catalog ID");
+  const fixtureId = await fixtureHandle.jsonValue();
+  assert.ok(Number.isSafeInteger(fixtureId), "new photo must have a real Rust catalog ID");
   await page.evaluate(async id => {
     await lightcraft.command("library.select", JSON.stringify({ ids: [id], active: id }));
     await lightcraft.command("view.zoomFit", "{}");
-  }, fixture.id);
+  }, fixtureId);
   // A new empty library opens its native library sheet automatically.
   if (await page.locator("#library_dialog").evaluate(dialog => dialog.open)) {
     await page.getByRole("button", { name: "Close library" }).click();
@@ -145,6 +143,12 @@ try {
   assert.ok(reverted && Math.abs(reverted.value - current.value) < 0.00001, "Undo restores original exposure");
   assert.deepEqual(errors, [], "browser page should not raise unhandled JavaScript errors");
   console.log("Mobile Studio browser smoke passed; screenshots in " + reportDir);
+} catch (error) {
+  console.error("Mobile Studio browser smoke failed:", error);
+  console.error("Page errors:", errors);
+  console.error("Loading message:", await page.locator("#lightcraft_loading").textContent().catch(() => "(unavailable)"));
+  await page.screenshot({ path: reportDir + "/phone-failure.png", fullPage: true }).catch(() => {});
+  throw error;
 } finally {
   await context.close();
   await browser.close();
