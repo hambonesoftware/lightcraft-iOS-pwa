@@ -268,3 +268,15 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 @media (max-height: 620px) {
   .studio-immersive .category-tabs, .studio-immersive .category-tabs button { min-height: 49px; }
 }
+
+.storage-status {
+  color: var(--muted); font-size: 12px; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 10px; margin: 0 0 12px;
+  background: rgba(255,255,255,.025); line-height: 1.45;
+}
+.backup-button {
+  display: block; width: 100%; min-height: 48px; margin-top: 10px;
+  border: 1px solid rgba(230,181,130,.5); border-radius: 13px;
+  background: rgba(230,181,130,.075); color: var(--accent);
+  font-size: 13px; font-weight: 650;
+}
