@@ -93,7 +93,8 @@ export function createBackupHandoff({
       onNotice("Backup download requested. Verify the ZIP in Files → Downloads or On My iPhone.");
     } finally {
       // Safari can keep reading the URL after the click event has returned.
-      setTimeout(() => urlObject.revokeObjectURL?.(url), 60_000);
+      const release = setTimeout(() => urlObject.revokeObjectURL?.(url), 60_000);
+      release?.unref?.();
     }
   }
 
