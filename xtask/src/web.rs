@@ -24,8 +24,18 @@ const CHINESE_FONT_FILE: &str = "lightcraft_zh_hans.otf";
 const CHINESE_FONT_LICENSE_FILE: &str = "OFL-noto-sans-cjk-sc.txt";
 
 /// Files copied from `apps/lightcraft-web/` into the bundle as they are.
-const STATIC_FILES: [&str; 8] =
-    ["index.html", "worker.js", "manifest.webmanifest", "sw.js", "mobile-lab.html", "mobile-lab.css", "mobile-lab.mjs", "backup-files.mjs"];
+const STATIC_FILES: [&str; 10] = [
+    "index.html",
+    "worker.js",
+    "manifest.webmanifest",
+    "sw.js",
+    "mobile-lab.html",
+    "mobile-lab.css",
+    "mobile-lab.mjs",
+    "backup-files.mjs",
+    "saved-photos.mjs",
+    "saved-photos-ui.mjs",
+];
 
 /// Bundle files that get precompressed copies.
 const COMPRESSED: [&str; 4] = ["index.html", "worker.js", "lightcraft_web.js", "lightcraft_web_bg.wasm"];
