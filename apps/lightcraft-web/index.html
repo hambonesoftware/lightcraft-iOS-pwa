@@ -88,7 +88,15 @@
       <p class="privacy-caption">Your originals and edits live on this device, in private web-app storage. Back up important photographs regularly: uninstalling the app, clearing its data, or storage eviction may delete the local library.</p>
       <p id="storage_status" class="storage-status" role="status" aria-live="polite">Checking available device storage…</p>
       <button id="import_photo" type="button" class="import-button">+ Import photographs</button>
-      <button id="backup_library" type="button" class="backup-button">Back up library to a file</button>
+      <button id="backup_library" type="button" class="backup-button">Prepare complete library backup</button>
+      <section id="backup_ready" class="backup-ready" aria-label="Library backup ready to save" hidden>
+        <p id="backup_message" role="status" aria-live="polite">Backup prepared in memory. It is not yet stored outside LightCraft.</p>
+        <button id="share_backup" type="button" class="backup-button backup-primary">Share / Save to Files</button>
+        <button id="download_backup" type="button" class="backup-button">Download backup ZIP</button>
+        <p class="privacy-caption">Choose Save to Files → On My iPhone in the share sheet, then verify the ZIP in Files. Clearing browser data cannot erase a separate copy saved there.</p>
+      </section>
+      <button id="restore_backup" type="button" class="backup-button">Restore complete library from ZIP</button>
+      <input id="restore_backup_picker" type="file" accept=".zip,application/zip" hidden>
       <div id="library_count" class="library-count" role="status"></div>
       <div id="library_items" class="library-items"></div>
     </dialog>
