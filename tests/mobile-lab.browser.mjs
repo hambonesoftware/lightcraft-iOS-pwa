@@ -90,8 +90,18 @@ try {
       return false;
     }
   }, fixtureName, { timeout: 60000 });
-  const fixtureId = await fixtureHandle.jsonValue();
-  assert.ok(Number.isSafeInteger(fixtureId), "new photo must have a real Rust catalog ID");
+  const returnedId = await fixtureHandle.jsonValue();
+  const fixtureId = typeof returnedId === "string" && /^\\d+$/.test(returnedId) ? Number(returnedId) : returnedId;
+  if (!Number.isSafeInteger(fixtureId)) {
+    const diagnostics = await page.evaluate(async () => ({
+      catalog: JSON.parse(await lightcraft.command("catalog.query", JSON.stringify({ filter: {}, limit: 15 }))),
+      state: JSON.parse(await lightcraft.command("library.state", "{}")),
+      browserStatus: document.querySelector("#lightcraft_status")?.textContent,
+      studioVisible: !document.querySelector("#mobile_studio")?.hidden
+    }));
+    console.error("Invalid photo ID from real catalog query:", JSON.stringify({ returnedId, fixtureId, diagnostics }, null, 2));
+    throw new Error("Imported photo did not expose a usable Rust catalog ID");
+  }
   // Choose the imported photo through the mobile library rather than bypassing the UI.
   if (!(await page.locator("#library_dialog").evaluate(dialog => dialog.open))) {
     await page.getByRole("button", { name: "Open photo library" }).click();
