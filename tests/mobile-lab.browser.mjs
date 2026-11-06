@@ -91,7 +91,7 @@ try {
     }
   }, fixtureName, { timeout: 60000 });
   const returnedId = await fixtureHandle.jsonValue();
-  const fixtureId = typeof returnedId === "string" && /^\\d+$/.test(returnedId) ? Number(returnedId) : returnedId;
+  const fixtureId = typeof returnedId === "string" && /^[0-9]+$/.test(returnedId) ? Number(returnedId) : returnedId;
   if (!Number.isSafeInteger(fixtureId)) {
     const diagnostics = await page.evaluate(async () => ({
       catalog: JSON.parse(await lightcraft.command("catalog.query", JSON.stringify({ filter: {}, limit: 15 }))),
