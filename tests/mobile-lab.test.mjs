@@ -10,7 +10,8 @@ import {
   percentOf
 } from "../apps/lightcraft-web/mobile-lab.mjs";
 
-const html = readFileSync(new URL("../apps/lightcraft-web/mobile-lab.html", import.meta.url), "utf8");
+const html = readFileSync(new URL("../apps/lightcraft-web/index.html", import.meta.url), "utf8");
+const preview = readFileSync(new URL("../apps/lightcraft-web/mobile-lab.html", import.meta.url), "utf8");
 const css = readFileSync(new URL("../apps/lightcraft-web/mobile-lab.css", import.meta.url), "utf8");
 const rust = readFileSync(new URL("../apps/lightcraft-web/src/web.rs", import.meta.url), "utf8");
 
@@ -19,7 +20,8 @@ test("each focused correction tab maps to the actual engine section identifiers"
   assert.ok(CATEGORY_SECTIONS.color.includes("grading"));
   assert.deepEqual(CATEGORY_SECTIONS.detail, ["detail"]);
   assert.ok(CATEGORY_SECTIONS.optics.includes("optics"));
-  assert.ok(Object.keys(CATEGORY_SECTIONS).length >= 5);
+  assert.ok(Object.keys(CATEGORY_SECTIONS).length >= 6);
+  assert.deepEqual(CATEGORY_SECTIONS.looks, []);
 });
 
 test("categories filter engine-returned control specs instead of inventing local filters", () => {
@@ -56,11 +58,15 @@ test("selected photo identity is read only from actual catalog selection", () =>
   assert.equal(fileTypeLabel({ fileName: "portrait.jpeg" }), "JPEG");
 });
 
-test("prototype is a separate route with a Rust import and command bridge", () => {
+test("mobile studio is the sole shipped PWA entry and uses original Rust engine", () => {
   assert.match(html, /<canvas id="lightcraft_canvas"/);
   assert.match(html, /import init, \{ start, command, import_browser_files \}/);
   assert.match(html, /mountMobileStudio\(\{ command, importBrowserFiles: import_browser_files \}\)/);
-  assert.match(rust, /fn is_mobile_lab\(\) -> bool/);
+  assert.doesNotMatch(rust, /fn is_mobile_lab\(\) -> bool/);
+  assert.doesNotMatch(rust, /self\.mobile_lab/);
+  assert.match(html, /data-category="looks"/);
+  assert.equal(html, preview);
+  assert.match(html, /register\("\.\/sw\.js"/);
   assert.match(rust, /pub fn import_browser_files\(files: web_sys::FileList\)/);
   assert.match(rust, /self\.app\.ui\.fullscreen = fullscreen;/);
   assert.match(rust, /fn mobile_lab_notice\(text: &str\)/);
@@ -77,6 +83,8 @@ test("mobile layout honors device safe areas and reserves the photo canvas", () 
   assert.match(css, /@media \(max-height: 620px\)/);
   assert.match(html, /role="tablist"/);
   assert.match(html, /id="files_picker"/);
+  assert.match(html, /id="panel_toggle"/);
+  assert.match(html, /id="storage_status"/);
 });
 
 test("prototype does not contain a second fake image editing pipeline", () => {
@@ -86,5 +94,10 @@ test("prototype does not contain a second fake image editing pipeline", () => {
   assert.match(js, /call\("develop\.endInteraction"/);
   assert.match(js, /call\("library\.select"/);
   assert.match(js, /call\("develop\.controls"/);
+  assert.match(js, /call\("presets\.list"/);
+  assert.match(js, /call\("preset\.apply"/);
+  assert.match(js, /call\("preset\.favorite"/);
+  assert.match(js, /storage\.persist\(\)/);
+  assert.match(js, /storage\.estimate\(\)/);
   assert.doesNotMatch(js, /getImageData|putImageData|ctx\.filter|canvas\.toDataURL|fetch\(["']https?:/);
 });
