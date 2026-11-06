@@ -58,7 +58,7 @@ test("selected photo identity is read only from actual catalog selection", () =>
 
 test("prototype is a separate route with a Rust import and command bridge", () => {
   assert.match(html, /<canvas id="lightcraft_canvas"/);
-  assert.match(html, /import \{ start, command, import_browser_files \}/);
+  assert.match(html, /import init, \{ start, command, import_browser_files \}/);
   assert.match(html, /mountMobileStudio\(\{ command, importBrowserFiles: import_browser_files \}\)/);
   assert.match(rust, /fn is_mobile_lab\(\) -> bool/);
   assert.match(rust, /pub fn import_browser_files\(files: web_sys::FileList\)/);
