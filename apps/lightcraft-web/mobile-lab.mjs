@@ -8,6 +8,7 @@
  */
 
 import { createBackupHandoff } from "./backup-files.mjs";
+import { mountSavedPhotosUI } from "./saved-photos-ui.mjs";
 
 export const CATEGORY_SECTIONS = Object.freeze({
   looks: [],
@@ -103,6 +104,13 @@ export function mountMobileStudio({ command, importBrowserFiles, restoreBrowserB
   // The ZIP is staged by Rust; the next actual button tap opens iOS Share,
   // preserving Safari's transient user activation.
   globalThis.lightcraftReceiveBackup = (blob, filename) => backupHandoff.stage(blob, filename);
+  const savedPhotosUI = mountSavedPhotosUI({
+    call,
+    getSelectedPhoto: () => catalog.find(photo => photo.id === activeId),
+    getSelectedId: () => activeId,
+    notify,
+    closeLibrary: () => libraryDialog.close()
+  });
 
 
   async function call(name, params = {}) {
@@ -163,7 +171,7 @@ export function mountMobileStudio({ command, importBrowserFiles, restoreBrowserB
     el("current_photo").textContent = photo?.fileName || "Select a photograph";
     el("undo").disabled = activeId === null;
     el("redo").disabled = activeId === null;
-    el("export_photo").disabled = activeId === null;
+    el("export_photo").disabled = activeId === null || savedPhotosUI.isSaving();
     el("auto_correct").disabled = activeId === null || activeCategory !== "light";
     el("fit_photo").disabled = activeId === null;
     el("compare_photo").disabled = activeId === null;
@@ -574,29 +582,14 @@ export function mountMobileStudio({ command, importBrowserFiles, restoreBrowserB
     await call("develop.auto");
     await refreshState();
   }));
-  el("export_photo").addEventListener("click", () => submit(async () => {
-    const photo = catalog.find(item => item.id === activeId);
-    if (!photo) throw new Error("Select a photograph before exporting.");
-    const stem = String(photo.fileName || "LightCraft")
-      .replace(/\.[^.]+$/, "")
-      .replace(/[^a-zA-Z0-9_-]+/g, "-")
-      .slice(0, 80) || "LightCraft";
-    // Use the real export encoder and the existing browser download service.
-    // Do not open the desktop egui export dialog in the mobile application.
-    await call("app.export", {
-      ids: [activeId],
-      path: stem + "-LightCraft.jpg",
-      format: "jpeg",
-      quality: 92
-    });
-    notify("Export prepared. Check your browser downloads or the Files app.");
-  }));
+  el("export_photo").addEventListener("click", () => submit(() => savedPhotosUI.savePhoto()));
 
   (async () => {
     try {
       await waitForWasmReady();
       await refreshState();
       checkStorageDurability().catch(() => {});
+      savedPhotosUI.updateCount().catch(() => {});
       root.hidden = false;
       loading.hidden = true;
       loading.style.display = "none";
