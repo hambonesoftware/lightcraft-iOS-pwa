@@ -80,6 +80,26 @@ jobs:
           print("PWA bundle checks passed")
           PY
 
+      - name: Exercise the real mobile studio in a phone-sized browser
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --ignore-scripts playwright@1.58.0
+          npx playwright install --with-deps chromium
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory target/web-site > /tmp/lightcraft-mobile-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          node tests/mobile-lab.browser.mjs
+
+      - name: Upload mobile viewport screenshots
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lightcraft-mobile-studio-viewport-screenshots
+          path: target/mobile-lab-screenshots/
+          if-no-files-found: ignore
+
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v4
