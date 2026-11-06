@@ -55,6 +55,21 @@ try {
   assert.equal(await page.locator("#mobile_studio").evaluate(el => el.hidden), false);
   await page.waitForFunction(() => !!globalThis.lightcraft?.command, { timeout: 30000 });
 
+  // Browser storage warnings must remain readable without the desktop
+  // egui toast becoming gigantic and covering the photograph.
+  const nativeNotice = page.locator("#mobile_notice");
+  await page.waitForTimeout(250);
+  if ((await page.locator("#mobile_notice_text").textContent())?.trim()) {
+    assert.ok(await nativeNotice.isVisible(), "engine warnings must be presented as a native mobile notice");
+    const warningHeight = await nativeNotice.evaluate(el => el.getBoundingClientRect().height);
+    assert.ok(warningHeight <= 56, "storage notice must be compact rather than cover the photo");
+    await page.locator("#mobile_notice_open").click();
+    assert.ok(await page.locator("#mobile_notice_dialog").evaluate(el => el.open));
+    assert.ok((await page.locator("#mobile_notice_text").textContent()).length > 20);
+    await page.locator("#mobile_notice_close").click();
+    assert.equal(await nativeNotice.isVisible(), false);
+  }
+
   // The photo viewer must have a nonzero, nonoverlapping layout in a phone viewport.
   const geometry = await page.evaluate(() => {
     const rect = id => {
