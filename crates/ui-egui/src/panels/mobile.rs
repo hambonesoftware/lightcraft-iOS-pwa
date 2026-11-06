@@ -97,6 +97,28 @@ fn drawer_height(remaining_height: f32, expanded: bool) -> f32 {
     desired.max(90.0).min((remaining_height - photo_reserve).max(90.0))
 }
 
+/// The inspector and photo areas never overlap. Rectangles are calculated
+/// from the physical editor viewport rather than inferred from nested panels.
+fn mobile_work_area(full: Rect, has_search: bool, drawer: Drawer, expanded: bool, previewing: bool) -> (Rect, Rect) {
+    const HEADER: f32 = 54.0;
+    const NAV: f32 = 64.0;
+    const SEARCH: f32 = 54.0;
+    let top = full.top() + HEADER + if has_search { SEARCH } else { 0.0 };
+    let bottom = full.bottom() - NAV;
+    let space = (bottom - top).max(0.0);
+    let inspector_height = if drawer == Drawer::Closed {
+        0.0
+    } else {
+        let base = drawer_height(space, expanded);
+        (base + if previewing && !expanded { 80.0 } else { 0.0 }).min((space - 100.0).max(0.0))
+    };
+    let inspector_top = bottom - inspector_height;
+    (
+        Rect::from_min_max(pos2(full.left(), top), pos2(full.right(), inspector_top)),
+        Rect::from_min_max(pos2(full.left(), inspector_top), pos2(full.right(), bottom)),
+    )
+}
+
 fn state_id() -> Id {
     Id::unique(STATE_KEY)
 }
@@ -455,25 +477,15 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     }
     region(ui, "mobile_bottom_navigation", nav_rect, t.chrome, vec2(7.0, 4.0), |ui| navigation(app, ui, &mut state));
 
-    let content_top = full.top() + top_h;
-    let content_bottom = nav_rect.top();
-    let space = (content_bottom - content_top).max(0.0);
     let previewing = state.drawer == Drawer::Presets && super::presets::mobile_preview_active(&ctx);
-    let sheet_h = if state.drawer == Drawer::Closed {
-        0.0
-    } else {
-        let base = drawer_height(space, state.expanded);
-        // A selected look reveals a strength slider and Apply/Cancel row:
-        // grow the inspector rather than letting those buttons clip.
-        (base + if previewing && !state.expanded { 80.0 } else { 0.0 }).min((space - 100.0).max(0.0))
-    };
-    let sheet_top = content_bottom - sheet_h;
-    if state.drawer != Drawer::Closed && sheet_h > 0.0 {
-        let sheet = Rect::from_min_max(pos2(full.left(), sheet_top), pos2(full.right(), content_bottom));
-        region(ui, "mobile_inspector", sheet, t.chrome, vec2(11.0, 5.0), |ui| drawer(app, ui, &mut state));
-        ui.painter().line_segment([pos2(sheet.left(), sheet.top()), pos2(sheet.right(), sheet.top())], Stroke::new(1.0, t.divider));
+    let (photo_rect, sheet_rect) = mobile_work_area(full, has_search, state.drawer, state.expanded, previewing);
+    if state.drawer != Drawer::Closed && sheet_rect.height() > 0.0 {
+        region(ui, "mobile_inspector", sheet_rect, t.chrome, vec2(11.0, 5.0), |ui| drawer(app, ui, &mut state));
+        ui.painter().line_segment(
+            [pos2(sheet_rect.left(), sheet_rect.top()), pos2(sheet_rect.right(), sheet_rect.top())],
+            Stroke::new(1.0, t.divider),
+        );
     }
-    let photo_rect = Rect::from_min_max(pos2(full.left(), content_top), pos2(full.right(), sheet_top));
     region(ui, "mobile_photo", photo_rect, t.canvas, vec2(0.0, 0.0), |ui| central(app, ui, state.drawer));
     ui.painter().line_segment([pos2(nav_rect.left(), nav_rect.top()), pos2(nav_rect.right(), nav_rect.top())], Stroke::new(1.0, t.divider));
 
@@ -482,6 +494,40 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
 #[cfg(test)]
 mod tests {
     use super::{drawer_height, is_compact};
+
+    #[test]
+    fn mobile_inspector_and_photo_are_strictly_non_overlapping() {
+        use super::{Drawer, mobile_work_area};
+        use egui::{Rect, pos2};
+        for height in [350.0, 640.0, 768.0, 852.0, 1024.0] {
+            let full = Rect::from_min_max(pos2(0.0, 0.0), pos2(393.0, height));
+            for drawer in [Drawer::Closed, Drawer::Tools, Drawer::Presets, Drawer::More] {
+                for expanded in [false, true] {
+                    for preview in [false, true] {
+                        let (photo, inspector) = mobile_work_area(full, false, drawer, expanded, preview);
+                        assert!(photo.height() > 0.0);
+                        assert_eq!(photo.bottom(), inspector.top());
+                        assert!(inspector.bottom() <= height - 64.0);
+                        assert_eq!(inspector.left(), 0.0);
+                        assert_eq!(inspector.right(), 393.0);
+                        if drawer == Drawer::Closed {
+                            assert_eq!(inspector.height(), 0.0);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn selecting_a_look_makes_room_for_strength_and_apply() {
+        use super::{Drawer, mobile_work_area};
+        use egui::{Rect, pos2};
+        let full = Rect::from_min_max(pos2(0.0, 0.0), pos2(390.0, 800.0));
+        let (_, unselected) = mobile_work_area(full, false, Drawer::Presets, false, false);
+        let (_, selected) = mobile_work_area(full, false, Drawer::Presets, false, true);
+        assert!(selected.height() >= unselected.height() + 50.0);
+    }
 
     #[test]
     fn correction_categories_have_unique_engine_sections() {
