@@ -338,54 +338,154 @@ const MOBILE_PRESET_PREVIEW: &str = "mobile-preset-preview";
 
 /// Two-column, touch-first filter gallery using the same variant renderer as
 /// LightCraft's desktop preset thumbnails. Previewing never commits a change.
+pub fn mobile_preview_active(ctx: &egui::Context) -> bool {
+    ctx.data(|data| data.get_temp::<MobilePresetPreview>(egui::Id::unique(MOBILE_PRESET_PREVIEW)).is_some())
+}
+
+pub fn clear_mobile_preview(ctx: &egui::Context) {
+    ctx.data_mut(|data| data.remove::<MobilePresetPreview>(egui::Id::unique(MOBILE_PRESET_PREVIEW)));
+}
+
+/// Touch-first Looks inspector. One preview row stays near the photo instead
+/// of putting a long, vertically-scrolling desktop gallery in a bottom sheet.
+/// Groups and pages bound rendering work even for imported libraries with
+/// thousands of third-party presets.
 pub fn show_mobile(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     let Some(photo) = app.session.active() else {
-        ui.label(crate::i18n::tr("Choose a photo before selecting a preset."));
+        ui.label(crate::i18n::tr("Choose a photo to preview looks."));
         return;
     };
     let key = egui::Id::unique(MOBILE_PRESET_PREVIEW);
-    let mut pending: Option<MobilePresetPreview> = ui.data(|d| d.get_temp(key));
+    let group_key = egui::Id::unique("mobile-looks-group");
+    let page_key = egui::Id::unique("mobile-looks-page");
+    let mut pending: Option<MobilePresetPreview> = ui.data(|data| data.get_temp(key));
     if pending.as_ref().is_some_and(|p| p.photo != photo || !app.session.presets.iter().any(|pr| pr.id == p.preset_id)) {
         pending = None;
     }
     let t = Tokens::get(ui.ctx());
     let base = app.session.develop_of(photo).unwrap_or_default();
+    let groups = grouped(ui.ctx(), &app.session.presets);
+    let mut group_index: usize = ui.data(|data| data.get_temp(group_key)).unwrap_or(0);
+    let mut page: usize = ui.data(|data| data.get_temp(page_key)).unwrap_or(0);
+    if groups.is_empty() {
+        ui.label("No looks available. Import or create a preset to get started.");
+        return;
+    }
+    group_index = group_index.min(groups.len() - 1);
 
     ui.horizontal_centered(|ui| {
-        ui.label(egui::RichText::new("Looks & Presets").strong().size(14.0));
+        ui.label(egui::RichText::new("Explore looks").strong().size(13.0));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.add_sized([76.0, 44.0], egui::Button::new("Create")).clicked() {
+            if ui.add_sized([67.0, 36.0], egui::Button::new("Create").frame(false)).clicked() {
                 app.ui.dialog = Some(crate::state::Dialog::create_preset());
             }
         });
     });
 
-    // Keep Apply and Cancel explicit. A swipe across looks should not add
-    // dozens of undo steps or unintentionally overwrite the photograph.
+    // When a look is selected, prioritize precision and explicit consent.
+    // The selected strength only changes a hover preview, not the catalog.
     let mut apply_choice: Option<(String, f64)> = None;
     let mut cancel_preview = false;
     if let Some(selection) = pending.as_mut() {
-        ui.label(egui::RichText::new("Previewing a look — original edits are unchanged").size(12.0).color(t.text_dim));
+        if let Some(preset) = app.session.presets.iter().find(|pr| pr.id == selection.preset_id) {
+            ui.label(egui::RichText::new(format!("Preview · {}", crate::i18n::builtin_label(&preset.name, preset.builtin))).strong().size(12.0));
+        }
         ui.add_sized(
-            [ui.available_width().max(120.0), 44.0],
+            [ui.available_width().max(100.0), 42.0],
             egui::Slider::new(&mut selection.amount, 0.0..=200.0).text("Strength").suffix("%").step_by(1.0),
         );
-        ui.horizontal(|ui| {
-            if ui.add_sized([112.0, 44.0], egui::Button::new("Apply Look")).clicked() {
+        ui.horizontal_centered(|ui| {
+            if ui.add_sized([118.0, 44.0], egui::Button::new("Apply Look")).clicked() {
                 apply_choice = Some((selection.preset_id.clone(), selection.amount));
             }
-            if ui.add_sized([90.0, 44.0], egui::Button::new("Cancel")).clicked() {
+            if ui.add_sized([86.0, 44.0], egui::Button::new("Cancel").frame(false)).clicked() {
                 cancel_preview = true;
             }
         });
     } else {
-        ui.label(egui::RichText::new("Tap a look to preview it. Apply only when you like the result.").size(12.0).color(t.text_dim));
+        // The group picker disappears while adjusting a preview, making room
+        // for the photo-specific intensity slider and action buttons.
+        egui::ScrollArea::horizontal().id_salt("mobile-looks-groups").show(ui, |ui| {
+            ui.horizontal_centered(|ui| {
+                ui.spacing_mut().item_spacing.x = 6.0;
+                for (index, group) in groups.iter().enumerate() {
+                    let label = crate::i18n::builtin_label(&group.name, group.builtin);
+                    let width = ((label.chars().count() as f32) * 7.0 + 22.0).clamp(65.0, 160.0);
+                    if ui.add_sized([width, 35.0], egui::Button::new(label).selected(group_index == index)).clicked() {
+                        group_index = index;
+                        page = 0;
+                    }
+                }
+            });
+        });
     }
+
+    // Stable visual strip: cap each page at twelve photo-specific renders.
+    // Rendering off-screen thousands of imported presets would overwhelm
+    // iOS WebKit and cause exactly the kind of menu freezes we're avoiding.
+    const PER_PAGE: usize = 12;
+    const TILE_W: f32 = 105.0;
+    const TILE_H: f32 = 115.0;
+    let items = &groups[group_index].items;
+    let total_pages = items.len().div_ceil(PER_PAGE).max(1);
+    page = page.min(total_pages - 1);
+    let start = page * PER_PAGE;
+    let end = (start + PER_PAGE).min(items.len());
+
+    ui.horizontal_centered(|ui| {
+        if total_pages > 1 && ui.add_sized([38.0, 44.0], egui::Button::new("‹").frame(false)).clicked() {
+            page = page.saturating_sub(1);
+        }
+        let available = ui.available_width() - if total_pages > 1 { 38.0 } else { 0.0 };
+        egui::ScrollArea::horizontal().id_salt(("mobile-looks-strip", group_index, page)).max_width(available.max(TILE_W)).show(ui, |ui| {
+            ui.horizontal_centered(|ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
+                for &index in &items[start..end] {
+                    let Some(preset) = app.session.presets.get(index).cloned() else { continue };
+                    let selected = pending.as_ref().is_some_and(|p| p.preset_id == preset.id);
+                    let (rect, response) = ui.allocate_exact_size(vec2(TILE_W, TILE_H), Sense::click());
+                    register(ui, format!("mobilePreset:{}", preset.id), rect);
+                    let label = crate::i18n::builtin_label(&preset.name, preset.builtin);
+                    crate::widgets::announce(&response, label.to_string());
+                    ui.painter().rect_filled(rect, 7.0, if selected { t.tool_active } else { t.canvas });
+                    ui.painter().rect_stroke(
+                        rect,
+                        7.0,
+                        egui::Stroke::new(if selected { 2.0 } else { 1.0 }, if selected { t.accent } else { t.divider }),
+                        egui::StrokeKind::Inside,
+                    );
+                    let image = Rect::from_min_max(rect.min + vec2(4.0, 4.0), pos2(rect.right() - 4.0, rect.bottom() - 27.0));
+                    ui.painter().rect_filled(image, 5.0, t.chrome);
+                    // Lazy: only thumbnails within the visible carousel request
+                    // the full per-photo filter variant, keeping memory stable.
+                    if ui.is_rect_visible(rect) {
+                        let preview_settings = preset.apply(&base, 1.0);
+                        if let Some(job) = app.session.variant_job(photo, &preview_settings, THUMB_EDGE)
+                            && let Some(texture) = app.renderer.variant(job)
+                        {
+                            ui.painter().image(texture.tex.id(), image, cover_uv(image, texture.size), Color32::WHITE);
+                        }
+                    }
+                    ui.painter().text(pos2(rect.center().x, rect.bottom() - 14.0), Align2::CENTER_CENTER, label, t.font(11.0), t.text_label);
+                    if response.clicked() {
+                        pending = Some(MobilePresetPreview { photo, preset_id: preset.id.clone(), amount: 100.0 });
+                    }
+                }
+            });
+        });
+        if total_pages > 1 && ui.add_sized([38.0, 44.0], egui::Button::new("›").frame(false)).clicked() {
+            page = (page + 1).min(total_pages - 1);
+        }
+    });
+    if total_pages > 1 {
+        ui.label(egui::RichText::new(format!("{} / {} · Swipe for more", page + 1, total_pages)).size(10.0).color(t.text_dim));
+    }
+
     if let Some((preset_id, amount)) = apply_choice {
         match app.run("preset.apply", json!({"id": preset_id, "amount": amount})) {
             Ok(_) => {
                 AppliedByPhoto::remember(ui.ctx(), &app.session, &preset_id);
-                ui.data_mut(|d| d.insert_temp(egui::Id::unique("preset-amount"), AppliedPreset::new(&app.session, preset_id, amount)));
+                ui.data_mut(|data| data.insert_temp(egui::Id::unique("preset-amount"), AppliedPreset::new(&app.session, preset_id, amount)));
                 pending = None;
                 app.hover_preview = None;
             }
@@ -395,82 +495,7 @@ pub fn show_mobile(app: &mut LightcraftApp, ui: &mut egui::Ui) {
         pending = None;
         app.hover_preview = None;
     }
-    ui.separator();
 
-    let groups = grouped(ui.ctx(), &app.session.presets);
-    egui::ScrollArea::vertical().id_salt("mobile-preset-gallery").auto_shrink([false, false]).show(ui, |ui| {
-        ui.spacing_mut().item_spacing.y = 0.0;
-        const TILE_H: f32 = 136.0;
-        const ROW_H: f32 = 144.0;
-        const GAP: f32 = 8.0;
-        // Responsive sizing makes room for two cards without horizontal
-        // clipping even on the narrowest supported iPhone.
-        let tile_w = ((ui.available_width() - GAP) / 2.0).max(72.0);
-        let visible = ui.clip_rect().expand(ROW_H);
-        for group in groups.iter() {
-            let (header, _) = ui.allocate_exact_size(vec2(ui.available_width(), 32.0), Sense::hover());
-            ui.painter().text(
-                pos2(header.left() + 8.0, header.center().y),
-                Align2::LEFT_CENTER,
-                crate::i18n::builtin_label(&group.name, group.builtin),
-                t.semibold(13.0),
-                t.text_label,
-            );
-            let rows = group.items.len().div_ceil(2);
-            let (first, end) = rows_in_view(ui.cursor().top(), ROW_H, rows, visible);
-            if first > 0 {
-                ui.add_space(first as f32 * ROW_H);
-            }
-            for row in first..end {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = GAP;
-                    for col in 0..2 {
-                        let Some(&index) = group.items.get(row * 2 + col) else {
-                            ui.add_space(tile_w);
-                            continue;
-                        };
-                        let Some(preset) = app.session.presets.get(index).cloned() else { continue };
-                        let selected = pending.as_ref().is_some_and(|p| p.preset_id == preset.id);
-                        let (rect, response) = ui.allocate_exact_size(vec2(tile_w, TILE_H), Sense::click());
-                        register(ui, format!("mobilePreset:{}", preset.id), rect);
-                        crate::widgets::announce(&response, crate::i18n::builtin_label(&preset.name, preset.builtin).to_string());
-                        ui.painter().rect_filled(rect, 6.0, if selected { t.tool_active } else { t.canvas });
-                        ui.painter().rect_stroke(
-                            rect,
-                            6.0,
-                            egui::Stroke::new(if selected { 2.0 } else { 1.0 }, if selected { t.accent } else { t.divider }),
-                            egui::StrokeKind::Inside,
-                        );
-                        let image = Rect::from_min_max(rect.min + vec2(5.0, 5.0), pos2(rect.right() - 5.0, rect.bottom() - 32.0));
-                        ui.painter().rect_filled(image, 4.0, t.chrome);
-                        let look = preset.apply(&base, 1.0);
-                        if let Some(job) = app.session.variant_job(photo, &look, THUMB_EDGE)
-                            && let Some(texture) = app.renderer.variant(job)
-                        {
-                            ui.painter().image(texture.tex.id(), image, cover_uv(image, texture.size), Color32::WHITE);
-                        }
-                        ui.painter().text(
-                            pos2(rect.left() + 8.0, rect.bottom() - 16.0),
-                            Align2::LEFT_CENTER,
-                            crate::i18n::builtin_label(&preset.name, preset.builtin),
-                            t.font(12.0),
-                            t.text_label,
-                        );
-                        if response.clicked() {
-                            pending = Some(MobilePresetPreview { photo, preset_id: preset.id.clone(), amount: 100.0 });
-                        }
-                    }
-                });
-                ui.add_space(ROW_H - TILE_H);
-            }
-            if end < rows {
-                ui.add_space((rows - end) as f32 * ROW_H);
-            }
-        }
-    });
-
-    // The central image is painted AFTER this panel, so the user sees the live
-    // preview on the same pass. Neither selection nor amount touches the catalog.
     if let Some(selection) = pending.as_ref()
         && let Some(preset) = app.session.presets.iter().find(|pr| pr.id == selection.preset_id)
     {
@@ -479,11 +504,13 @@ pub fn show_mobile(app: &mut LightcraftApp, ui: &mut egui::Ui) {
             settings: preset.apply(&base, selection.amount / 100.0),
         });
     }
-    ui.data_mut(|d| {
+    ui.data_mut(|data| {
+        data.insert_temp(group_key, group_index);
+        data.insert_temp(page_key, page);
         if let Some(value) = pending {
-            d.insert_temp(key, value);
+            data.insert_temp(key, value);
         } else {
-            d.remove::<MobilePresetPreview>(key);
+            data.remove::<MobilePresetPreview>(key);
         }
     });
 }
