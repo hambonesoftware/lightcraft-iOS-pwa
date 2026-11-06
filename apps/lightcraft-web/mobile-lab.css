@@ -194,3 +194,77 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 @media (prefers-reduced-motion: no-preference) {
   .category-tabs button, .auto-button { transition: color .15s ease, background .15s ease; }
 }
+
+
+/* Mobile Studio is the sole application shell, with a photo-first compact mode. */
+.grabber-button {
+  display: grid; place-items: center; align-self: stretch; width: 100%;
+  height: 20px; padding: 0; border: 0; background: transparent;
+  touch-action: manipulation; flex: 0 0 20px;
+}
+.grabber-button .grabber { display: block; margin: 0; }
+:root.studio-immersive { --sheet-height: 80px; }
+.studio-immersive .console-heading,
+.studio-immersive .adjustment-scroller { display: none; }
+.studio-immersive .category-tabs { flex: 1; min-height: 56px; }
+.studio-immersive .category-tabs button { min-height: 56px; }
+.looks-search {
+  display: block; width: 100%; padding: 11px 14px; margin-bottom: 10px;
+  border-radius: 12px; border: 1px solid var(--line);
+  background: #36383b; color: var(--text); font-size: 16px;
+  -webkit-appearance: none; appearance: none;
+}
+.looks-search::placeholder { color: var(--muted); }
+.looks-groups {
+  display: flex; gap: 7px; margin: 4px -2px 12px;
+  padding: 0 2px 6px; overflow-x: auto; scrollbar-width: none;
+}
+.looks-groups::-webkit-scrollbar { display: none; }
+.looks-chip {
+  flex: none; border-radius: 999px; padding: 8px 12px; min-height: 36px;
+  border: 1px solid var(--line); color: var(--muted);
+  background: rgba(255,255,255,.035); white-space: nowrap; font-size: 12px;
+}
+.looks-chip[aria-pressed="true"] {
+  border-color: rgba(230,181,130,.58); color: var(--accent); background: var(--accent-dim);
+}
+.looks-gallery {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(128px,1fr));
+  align-content: start; gap: 10px; padding-bottom: 18px;
+}
+.look-item {
+  position: relative; min-width: 0; overflow: hidden;
+  border: 1px solid var(--line); border-radius: 13px;
+  background: #313237; min-height: 122px;
+}
+.look-item.selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px rgba(230,181,130,.38); }
+.look-apply {
+  display: flex; flex-direction: column; align-items: flex-start; width: 100%;
+  min-height: 122px; padding: 10px 12px; padding-right: 37px;
+  gap: 4px; border: none; background: transparent; text-align: left;
+}
+.look-symbol {
+  display: flex; align-items: center; justify-content: center;
+  width: 35px; height: 35px; margin-bottom: 1px;
+  border: 1px solid rgba(230,181,130,.28); border-radius: 10px;
+  color: var(--accent); background: linear-gradient(145deg,#544c46,#292a30);
+  font-size: 21px;
+}
+.look-name {
+  display: block; width: 100%; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; font-size: 13px; font-weight: 620;
+}
+.look-meta {
+  display: block; width: 100%; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; font-size: 10px; color: var(--muted);
+}
+.look-favorite {
+  position: absolute; top: 7px; right: 7px; display: grid; place-items: center;
+  height: 34px; width: 34px; background: rgba(21,22,25,.65);
+  border: 1px solid var(--line); border-radius: 10px;
+  color: var(--accent); font-size: 20px;
+}
+.look-overflow { grid-column: 1/-1; color: var(--muted); font-size: 12px; }
+@media (max-height: 620px) {
+  .studio-immersive .category-tabs, .studio-immersive .category-tabs button { min-height: 49px; }
+}
