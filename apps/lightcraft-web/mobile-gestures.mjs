@@ -175,11 +175,17 @@ export function mountPhotoGestures({
       if (doubleTap) {
         resetTransform();
         await call("view.zoomToggle");
+        await new Promise(resolve => requestFrame(resolve));
       } else {
         const state = g.initial || snapshot || await refresh();
         const intent = navigateFromGesture(state, g.viewport, g);
         if (intent) {
           await call("view.navigate", { zoom: intent.zoom, pan: intent.pan });
+          // Keep the old composited view under the fingers until egui has
+          // painted the new Rust viewport. Dropping the CSS transform as
+          // soon as the command resolves would visibly snap to the old view.
+          await new Promise(resolve => requestFrame(resolve));
+          await new Promise(resolve => requestFrame(resolve));
         }
       }
     } catch (error) {
