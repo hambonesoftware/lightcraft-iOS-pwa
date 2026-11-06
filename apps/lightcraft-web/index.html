@@ -109,6 +109,15 @@
     import { mountMobileStudio } from "./mobile-lab.mjs";
 
     (async () => {
+      const isNative = location.protocol === "capacitor:" ||
+        globalThis.Capacitor?.isNativePlatform?.() === true;
+      if (isNative) {
+        // Fail closed: Rust must never start with IndexedDB when this is an
+        // installed native app. This JS bundle is added by the native build.
+        const { initializeLightCraftNativeStorage } =
+          await import("./native-storage.js");
+        await initializeLightCraftNativeStorage();
+      }
       const chineseFont = fetch("./lightcraft_zh_hans.otf")
         .then(async response => response.ok ? new Uint8Array(await response.arrayBuffer()) : new Uint8Array())
         .catch(() => new Uint8Array());
