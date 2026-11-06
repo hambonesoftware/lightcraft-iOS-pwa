@@ -100,11 +100,63 @@ jobs:
           path: target/mobile-lab-screenshots/
           if-no-files-found: ignore
 
+      - name: Upload iOS-native web app payload
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lightcraft-native-wasm-web-assets
+          path: target/web-site/
+          if-no-files-found: error
+
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v4
         with:
           path: target/web-site
+
+  ios-native-build:
+    if: github.event_name == 'pull_request'
+    needs: build
+    runs-on: macos-15
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26.0'
+
+      - name: Download compiled local Rust/WASM site
+        uses: actions/download-artifact@v4
+        with:
+          name: lightcraft-native-wasm-web-assets
+          path: target/web-site
+
+      - name: Install native iOS host dependencies
+        working-directory: native/ios-app
+        run: npm install --no-audit --no-fund
+
+      - name: Generate native iOS app and bridge
+        working-directory: native/ios-app
+        run: |
+          npm run bundle
+          npx cap add ios
+          npm run sync:ios
+          test -s ../../target/web-site/native-storage.js
+          test -s ios/App/App/Info.plist
+
+      - name: Build iPhone Simulator app without signing
+        working-directory: native/ios-app
+        run: |
+          xcodebuild \
+            -workspace ios/App/App.xcworkspace \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
 
   deploy:
     if: github.event_name != 'pull_request'
