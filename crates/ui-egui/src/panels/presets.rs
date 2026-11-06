@@ -519,7 +519,6 @@ pub fn show_mobile(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     });
 }
 
-
 /// A preset group as the panel lists it: indices into the session's presets.
 struct Group {
     name: String,
