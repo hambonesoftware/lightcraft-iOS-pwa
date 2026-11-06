@@ -256,6 +256,7 @@ try {
   await page.getByRole("button", { name: "Close saved photo menu" }).click();
   await page.getByRole("button", { name: "Open photo library" }).click();
   await page.getByRole("button", { name: /Saved photos/ }).click();
+  await page.locator(".saved-pool-item").first().waitFor({ state: "visible", timeout: 20000 });
   assert.equal(await page.locator(".saved-pool-item").count(), 1);
   await page.locator(".saved-pool-open").first().click();
   await page.locator("#save_result_dialog").waitFor({ state: "visible" });
