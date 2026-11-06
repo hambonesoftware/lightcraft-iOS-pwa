@@ -241,9 +241,8 @@ fn download(path: &str, bytes: &[u8]) -> Result<(), String> {
     if let Ok(receiver) = js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("lightcraftReceivePhotoExport"))
         && let Some(callback) = receiver.dyn_ref::<js_sys::Function>()
     {
-        let handled = callback
-            .call2(&JsValue::NULL, blob.as_ref(), &JsValue::from_str(name))
-            .map_err(|error| format!("photo handoff failed: {error:?}"))?;
+        let handled =
+            callback.call2(&JsValue::NULL, blob.as_ref(), &JsValue::from_str(name)).map_err(|error| format!("photo handoff failed: {error:?}"))?;
         if handled.as_bool() == Some(true) {
             return Ok(());
         }
