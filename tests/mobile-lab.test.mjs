@@ -14,6 +14,7 @@ const html = readFileSync(new URL("../apps/lightcraft-web/index.html", import.me
 const preview = readFileSync(new URL("../apps/lightcraft-web/mobile-lab.html", import.meta.url), "utf8");
 const css = readFileSync(new URL("../apps/lightcraft-web/mobile-lab.css", import.meta.url), "utf8");
 const rust = readFileSync(new URL("../apps/lightcraft-web/src/web.rs", import.meta.url), "utf8");
+const savedUI = readFileSync(new URL("../apps/lightcraft-web/saved-photos-ui.mjs", import.meta.url), "utf8");
 const safety = readFileSync(new URL("../apps/lightcraft-web/src/safety.rs", import.meta.url), "utf8");
 const build = readFileSync(new URL("../xtask/src/web.rs", import.meta.url), "utf8");
 const sw = readFileSync(new URL("../apps/lightcraft-web/sw.js", import.meta.url), "utf8");
@@ -108,7 +109,8 @@ test("prototype does not contain a second fake image editing pipeline", () => {
   assert.match(js, /storage\.persist\(\)/);
   assert.match(js, /storage\.estimate\(\)/);
   assert.match(js, /call\("file\.backupLibrary"\)/);
-  assert.match(js, /call\("app\.export"/);
+  assert.match(savedUI, /call\("app\.export"/);
+  assert.match(js, /savedPhotosUI\.savePhoto\(\)/);
   assert.doesNotMatch(js, /call\("dialog\.export"/);
   assert.doesNotMatch(js, /getImageData|putImageData|ctx\.filter|canvas\.toDataURL|fetch\(["']https?:/);
 });
