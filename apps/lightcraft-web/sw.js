@@ -10,6 +10,9 @@ const CACHE_NAME = PREFIX + "__BUILD_SHA__";
 const SHELL_PATHS = [
   "./",
   "./index.html",
+  "./mobile-lab.html",
+  "./mobile-lab.css",
+  "./mobile-lab.mjs",
   "./worker.js",
   "./lightcraft_web.js",
   "./lightcraft_web_bg.wasm",
