@@ -43,6 +43,12 @@ fn window() -> Option<web_sys::Window> {
     web_sys::window()
 }
 
+/// The separate /mobile-lab.html route pilots a DOM-controlled phone
+/// workspace. The standard index.html and all desktop UI remain untouched.
+fn is_mobile_lab() -> bool {
+    window().and_then(|w| w.location().pathname().ok()).is_some_and(|path| path.ends_with("/mobile-lab.html"))
+}
+
 /// iPadOS may advertise itself as a desktop Mac, so also inspect touch support.
 /// This only adjusts memory-heavy render concurrency, never the photo data.
 fn is_ios_device() -> bool {
@@ -129,6 +135,31 @@ async fn read_file(originals: Originals, backend: Option<Backend>, file: web_sys
     match wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await {
         Ok(buf) => store_file(originals, backend, file.name(), js_sys::Uint8Array::new(&buf).to_vec(), ctx).await,
         Err(e) => log::warn!("reading {}: {e:?}", file.name()),
+    }
+}
+
+// The DOM picker must be called during its real user input event. Calling
+// file.addPhotos indirectly through an async WASM command would lose iOS Safari
+// user activation before the browser picker can open.
+thread_local! {
+    static MOBILE_LAB_IMPORT: std::cell::RefCell<Option<(Originals, Option<Backend>, egui::Context)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Store files chosen by an actual DOM <input type=file> using exactly the
+/// existing OPFS/IndexedDB and Originals import queue. No parallel catalog or
+/// alternate storage path is created for the mobile prototype.
+#[wasm_bindgen]
+pub fn import_browser_files(files: web_sys::FileList) {
+    let host = MOBILE_LAB_IMPORT.with(|i| i.borrow().clone());
+    let Some((originals, backend, ctx)) = host else {
+        log::warn!("mobile prototype picker used before LightCraft finished opening");
+        return;
+    };
+    for index in 0..files.length() {
+        if let Some(file) = files.get(index) {
+            wasm_bindgen_futures::spawn_local(read_file(originals.clone(), backend.clone(), file, ctx.clone()));
+        }
     }
 }
 
@@ -416,6 +447,8 @@ async fn boot(opts: Options) -> Boot {
 
 struct WebApp {
     app: LightcraftApp,
+    /// This is an opt-in prototype route, not a new app or separate library.
+    mobile_lab: bool,
     originals: Originals,
     files: Files,
     backend: Option<Backend>,
@@ -551,9 +584,16 @@ impl WebApp {
         }
         log::info!("lightcraft: {n} render workers");
         CTX.with(|c| *c.borrow_mut() = Some(cc.egui_ctx.clone()));
+        let mobile_lab = is_mobile_lab();
+        if mobile_lab {
+            MOBILE_LAB_IMPORT.with(|i| {
+                *i.borrow_mut() = Some((originals.clone(), backend.clone(), cc.egui_ctx.clone()));
+            });
+        }
         let origin = lightcraft_ui_egui::monotonic_ms();
         WebApp {
             app,
+            mobile_lab,
             originals,
             files,
             backend,
@@ -770,7 +810,27 @@ impl eframe::App for WebApp {
         // blocking library window (over an already open library) keeps a stored drop queued.
         let ctx = ui.ctx().clone();
         self.import_dropped(&ctx);
-        self.app.ui(ui);
+        if self.mobile_lab {
+            // A photo-only egui canvas is the *actual* LightCraft renderer,
+            // controlled by accessible HTML sliders via the command bridge.
+            // Fullscreen is restored before saving UI state, avoiding pollution
+            // of the normal desktop or original PWA layout preferences.
+            let fullscreen = self.app.ui.fullscreen;
+            let navigator = self.app.ui.navigator;
+            let face_boxes = self.app.ui.face_boxes;
+            let filmstrip = self.app.ui.filmstrip;
+            self.app.ui.fullscreen = true;
+            self.app.ui.navigator = false;
+            self.app.ui.face_boxes = false;
+            self.app.ui.filmstrip = false;
+            self.app.ui(ui);
+            self.app.ui.fullscreen = fullscreen;
+            self.app.ui.navigator = navigator;
+            self.app.ui.face_boxes = face_boxes;
+            self.app.ui.filmstrip = filmstrip;
+        } else {
+            self.app.ui(ui);
+        }
         // eframe's web runner ignores `ViewportCommand::Title`: name the open photo in the page title
         let title = self.app.page_title(self.files.is_dirty() || self.flushing.get());
         if title != self.title
