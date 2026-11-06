@@ -567,7 +567,8 @@ mod tests {
         use egui::{Color32, Context, RawInput, Rect, pos2, vec2};
         let ctx = Context::default();
         let screen = Rect::from_min_size(pos2(0.0, 0.0), vec2(393.0, 800.0));
-        let output = ctx.run_pass(RawInput { screen_rect: Some(screen), ..Default::default() }, |ctx| {
+        let input = RawInput { screen_rect: Some(screen), ..Default::default() };
+        let output = ctx.run_pass(input, |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
                 let sheet = Rect::from_min_size(pos2(0.0, 400.0), vec2(393.0, 260.0));
                 region(ui, "test_mobile_inspector", sheet, Color32::BLACK, vec2(8.0, 4.0), |ui| {
