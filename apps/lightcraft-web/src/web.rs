@@ -43,6 +43,21 @@ fn window() -> Option<web_sys::Window> {
     web_sys::window()
 }
 
+/// On the opt-in mobile route, browser safety notices belong to accessible
+/// DOM chrome, not the desktop egui toast over the photo renderer.
+/// Keep the full warning available to read; never silently discard it.
+fn mobile_lab_notice(text: &str) {
+    let Some(document) = window().and_then(|w| w.document()) else {
+        return;
+    };
+    if let Some(detail) = document.get_element_by_id("mobile_notice_text") {
+        detail.set_text_content(Some(text));
+    }
+    if let Some(banner) = document.get_element_by_id("mobile_notice") {
+        let _ = banner.remove_attribute("hidden");
+    }
+}
+
 /// The separate /mobile-lab.html route pilots a DOM-controlled phone
 /// workspace. The standard index.html and all desktop UI remain untouched.
 fn is_mobile_lab() -> bool {
@@ -782,8 +797,12 @@ impl eframe::App for WebApp {
     /// load originals the UI requested, apply the cache budget, run the app's logic, then save.
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         for text in safety::take_notices() {
-            let now = self.app.tick_now();
-            self.app.ui.toast = Some((text, now + NOTICE_SECS, None));
+            if self.mobile_lab {
+                mobile_lab_notice(&text);
+            } else {
+                let now = self.app.tick_now();
+                self.app.ui.toast = Some((text, now + NOTICE_SECS, None));
+            }
         }
         self.run_inbox();
         self.load_originals(ctx);
@@ -811,6 +830,11 @@ impl eframe::App for WebApp {
         let ctx = ui.ctx().clone();
         self.import_dropped(&ctx);
         if self.mobile_lab {
+            // Route any pending engine-generated warning to a small, readable
+            // native notice instead of an oversized egui toast over the photo.
+            if let Some((message, _, _)) = self.app.ui.toast.take() {
+                mobile_lab_notice(&message);
+            }
             // A photo-only egui canvas is the *actual* LightCraft renderer,
             // controlled by accessible HTML sliders via the command bridge.
             // Fullscreen is restored before saving UI state, avoiding pollution
