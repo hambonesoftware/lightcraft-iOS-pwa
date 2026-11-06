@@ -196,8 +196,7 @@ pub async fn backup(files: Files, backend: Backend, names: HashMap<String, Strin
         // in Documents/LightCraft/backups, visible through iOS Files.
         let buf = JsFuture::from(blob.array_buffer()).await.map_err(|e| format!("{e:?}"))?;
         let data = Uint8Array::new(&buf).to_vec();
-        backend.write(&format!("backups/{backup_name}"), &data).await
-            .map_err(|e| format!("saving native backup: {e}"))?;
+        backend.write(&format!("backups/{backup_name}"), &data).await.map_err(|e| format!("saving native backup: {e}"))?;
     } else {
         download_blob(&backup_name, &blob)?;
     }
