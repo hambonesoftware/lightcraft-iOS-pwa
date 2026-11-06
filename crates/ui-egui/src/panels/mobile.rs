@@ -111,11 +111,7 @@ fn mobile_work_area(full: Rect, has_search: bool, drawer: Drawer, expanded: bool
     } else {
         // Presets have a fixed-height, single-row look carousel. Allocating the
         // same tall drawer as the full editor created an empty gray wasteland.
-        let preferred = if drawer == Drawer::Presets && !expanded {
-            if previewing { 300.0 } else { 242.0 }
-        } else {
-            drawer_height(space, expanded)
-        };
+        let preferred = if drawer == Drawer::Presets && !expanded { if previewing { 300.0 } else { 242.0 } } else { drawer_height(space, expanded) };
         let photo_reserve = if space >= 550.0 { 215.0 } else { 100.0 };
         preferred.min((space - photo_reserve).max(0.0))
     };
