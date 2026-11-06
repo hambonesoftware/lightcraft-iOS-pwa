@@ -9,7 +9,7 @@ const DATABASE = "lightcraft-finished-photos";
 const VERSION = 1;
 const ITEMS = "items";
 const IMAGES = "images";
-const VALID_FILENAME = /^[^/\\\\\0-\x1f]{1,180}\\.(jpg|jpeg|png|webp)$/i;
+const VALID_FILENAME = /^[^/\\\x00-\x1f]{1,180}\.(jpg|jpeg|png|webp)$/i;
 
 function requestDone(request) {
   return new Promise((resolve, reject) => {
@@ -27,8 +27,8 @@ function transactionDone(transaction) {
 }
 
 export function safePhotoName(name) {
-  const base = String(name || "LightCraft-Edited.jpg").split(/[\\\\/]/).pop()
-    .replace(/[\\x00-\\x1f]/g, "").trim().slice(0, 180);
+  const base = String(name || "LightCraft-Edited.jpg").split(/[\\/]/).pop()
+    .replace(/[\x00-\x1f]/g, "").trim().slice(0, 180);
   if (!VALID_FILENAME.test(base)) throw new Error("LightCraft must export a JPEG, PNG or WebP image.");
   return base;
 }
