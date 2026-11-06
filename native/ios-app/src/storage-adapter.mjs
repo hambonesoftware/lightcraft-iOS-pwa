@@ -14,7 +14,7 @@ const ROOT = "LightCraft";
 
 export function nativeKey(path = "") {
   if (typeof path !== "string" || path.startsWith("/") || path.includes("\\") ||
-      path.split("/").some(segment => segment === "" || segment === "." || segment === "..") ||
+      (path !== "" && path.split("/").some(segment => segment === "" || segment === "." || segment === "..")) ||
       /[\u0000-\u001f]/.test(path)) {
     throw new Error("Unsafe LightCraft native storage path");
   }
