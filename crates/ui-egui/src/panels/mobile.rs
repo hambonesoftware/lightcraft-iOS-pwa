@@ -109,8 +109,15 @@ fn mobile_work_area(full: Rect, has_search: bool, drawer: Drawer, expanded: bool
     let inspector_height = if drawer == Drawer::Closed {
         0.0
     } else {
-        let base = drawer_height(space, expanded);
-        (base + if previewing && !expanded { 80.0 } else { 0.0 }).min((space - 100.0).max(0.0))
+        // Presets have a fixed-height, single-row look carousel. Allocating the
+        // same tall drawer as the full editor created an empty gray wasteland.
+        let preferred = if drawer == Drawer::Presets && !expanded {
+            if previewing { 300.0 } else { 242.0 }
+        } else {
+            drawer_height(space, expanded)
+        };
+        let photo_reserve = if space >= 550.0 { 215.0 } else { 100.0 };
+        preferred.min((space - photo_reserve).max(0.0))
     };
     let inspector_top = bottom - inspector_height;
     (
@@ -180,7 +187,7 @@ fn region(ui: &mut egui::Ui, key: &'static str, rect: Rect, fill: Color32, inset
 
 fn header(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileState) {
     let has_photo = app.session.active().is_some();
-    ui.horizontal_centered(|ui| {
+    ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 5.0;
         if !matches!(app.ui.view, ViewMode::PhotoGrid | ViewMode::SquareGrid)
             && ui.add_sized([72.0, 44.0], egui::Button::new("‹ Library").frame(false)).clicked()
@@ -210,7 +217,7 @@ fn header(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileState) {
     });
 }
 fn search_row(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileState) {
-    ui.horizontal_centered(|ui| {
+    ui.horizontal(|ui| {
         let width = (ui.available_width() - 70.0).max(110.0);
         let response = ui.add_sized([width, 44.0], egui::TextEdit::singleline(&mut app.ui.search).id(search_id()).hint_text("Search photos"));
         if response.changed() {
@@ -274,17 +281,27 @@ fn navigation(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileStat
     let detail = app.ui.view == ViewMode::Detail;
     // Library remains reachable while the correction categories scroll under
     // the thumb. No fixed five-column layout or horizontally squeezed text.
-    ui.horizontal_centered(|ui| {
+    ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
         if mobile_tab(ui, 67.0, "Library", Icon::GridPhoto, !detail, true) {
             open_library(app, state);
         }
         egui::ScrollArea::horizontal().id_salt("mobile-correction-navigation").auto_shrink([false, false]).show(ui, |ui| {
-            ui.horizontal_centered(|ui| {
+            ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
                 if mobile_tab(ui, 68.0, "Looks", Icon::Presets, detail && state.drawer == Drawer::Presets, has_photo) {
                     app.ui.view = ViewMode::Detail;
-                    state.drawer = if state.drawer == Drawer::Presets { Drawer::Closed } else { Drawer::Presets };
+                    if state.drawer == Drawer::Presets {
+                        state.drawer = Drawer::Closed;
+                    } else {
+                        state.drawer = Drawer::Presets;
+                        // Presets are evaluated for the whole image. Entering
+                        // the Looks inspector should not inherit a stale 1:1
+                        // loupe zoom and show a giant cropped face plus a map.
+                        app.ui.zoom = Zoom::Fit;
+                        app.ui.pan = (0.5, 0.5);
+                        app.ui.zoom_anim = false;
+                    }
                 }
                 for category in EditCategory::ALL {
                     let selected = detail && state.drawer == Drawer::Tools && app.ui.right == RightPanel::Edit && state.category == category;
@@ -364,7 +381,7 @@ fn drawer(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileState) {
         Drawer::Presets => "Looks",
         Drawer::More => "More Tools",
     };
-    ui.horizontal_centered(|ui| {
+    ui.horizontal(|ui| {
         ui.label(egui::RichText::new(title).strong().size(15.0));
         ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
             if ui.add_sized([60.0, 44.0], egui::Button::new("Done").frame(false)).clicked() {
@@ -382,7 +399,7 @@ fn drawer(app: &mut LightcraftApp, ui: &mut egui::Ui, state: &mut MobileState) {
     // Give the preview actions their own row. A single toolbar containing
     // title, Done, Expand, Fit and Before clips on smaller iPhone widths.
     if state.drawer == Drawer::Tools && app.ui.view == ViewMode::Detail {
-        ui.horizontal_centered(|ui| {
+        ui.horizontal(|ui| {
             if app.ui.right == RightPanel::Edit
                 && state.category == EditCategory::Light
                 && ui.add_sized([58.0, 44.0], egui::Button::new("Auto")).clicked()
@@ -430,7 +447,16 @@ fn central(app: &mut LightcraftApp, ui: &mut egui::Ui, drawer: Drawer) {
             // desktop setting when they return to a large window.
             let filmstrip = app.ui.filmstrip;
             let right = app.ui.right;
+            let face_boxes = app.ui.face_boxes;
+            let navigator = app.ui.navigator;
             app.ui.filmstrip = false;
+            // In a photo-correction drawer, overlays and the zoom minimap
+            // obstruct judging the edited image. Preserve user preferences
+            // and restore them immediately after the real photo is drawn.
+            if drawer == Drawer::Presets || (drawer == Drawer::Tools && right == RightPanel::Edit) {
+                app.ui.face_boxes = false;
+                app.ui.navigator = false;
+            }
             // Crop/mask overlays should not linger over the image while a
             // different drawer is active or the controls are collapsed.
             if drawer != Drawer::Tools {
@@ -438,6 +464,8 @@ fn central(app: &mut LightcraftApp, ui: &mut egui::Ui, drawer: Drawer) {
             }
             super::detail::show(app, ui);
             app.ui.right = right;
+            app.ui.face_boxes = face_boxes;
+            app.ui.navigator = navigator;
             app.ui.filmstrip = filmstrip;
         }
         ViewMode::Compare => super::compare::show_compare(app, ui),
@@ -522,6 +550,40 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn compact_looks_inspector_is_content_sized() {
+        use super::{Drawer, mobile_work_area};
+        use egui::{Rect, pos2};
+        let full = Rect::from_min_max(pos2(0.0, 0.0), pos2(393.0, 850.0));
+        let (photo, inspector) = mobile_work_area(full, false, Drawer::Presets, false, false);
+        assert!(inspector.height() <= 244.0);
+        assert!(inspector.height() >= 235.0);
+        assert!(photo.height() > inspector.height());
+        let (_, selected) = mobile_work_area(full, false, Drawer::Presets, false, true);
+        assert!(selected.height() >= inspector.height() + 50.0);
+    }
+
+    #[test]
+    fn inspector_header_row_stays_at_the_top() {
+        use super::region;
+        use egui::{Color32, Context, RawInput, Rect, pos2, vec2};
+        let ctx = Context::default();
+        let screen = Rect::from_min_size(pos2(0.0, 0.0), vec2(393.0, 800.0));
+        ctx.run(RawInput { screen_rect: Some(screen), ..Default::default() }, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                let sheet = Rect::from_min_size(pos2(0.0, 400.0), vec2(393.0, 260.0));
+                region(ui, "test_mobile_inspector", sheet, Color32::BLACK, vec2(8.0, 4.0), |ui| {
+                    let title = ui.horizontal(|ui| {
+                        ui.add_sized([70.0, 44.0], egui::Button::new("Looks"));
+                    });
+                    let gallery = ui.label("Preset thumbnail row");
+                    assert!(title.response.rect.top() <= sheet.top() + 12.0, "inspector header must be top-aligned");
+                    assert!(gallery.rect.top() < sheet.top() + 72.0, "content must not be pushed below the visible sheet");
+                });
+            });
+        });
     }
 
     #[test]
