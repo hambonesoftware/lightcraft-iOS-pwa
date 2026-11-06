@@ -1,0 +1,11 @@
+{
+  "appId": "com.hambonesoftware.lightcraftlocal",
+  "appName": "LightCraft Local",
+  "webDir": "../../target/web-site",
+  "bundledWebRuntime": false,
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#191a1d",
+    "preferredContentMode": "mobile"
+  }
+}
