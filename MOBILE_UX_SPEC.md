@@ -1,3 +1,18 @@
+## Follow-up: iPhone screenshot showed Looks still blank
+
+The November 5 follow-up screenshot showed the Photos loupe severely zoomed with a Navigator overlay, while the newly styled Looks inspector displayed only its title, Expand and Done in the vertical middle of an otherwise blank panel.
+
+**Root cause confirmed from the actual forked egui source:** `ui.horizontal_centered` calls `allocate_ui_with_layout_dyn` with `available_size_before_wrap()`, allocating the full available panel height. Using it for the first row of an inspector creates a full-height row, vertically centers the title, and pushes subsequent group and preset thumbnail controls below the panel's clip rect.
+
+**Correction:**
+- Use `ui.horizontal`, which sizes to the actual row content rather than the full available vertical space, throughout the compact inspector and mobile Looks browser.
+- Keep the unselected Looks inspector around 242 logical points and expand to 300 when a preset is selected, preserving the photo canvas.
+- Fit the photo and recenter pan when opening Looks so stale desktop/gesture zoom doesn't hide most of the image.
+- Suppress face boxes and the Navigator while evaluating Looks or develop corrections on mobile, restoring all persisted desktop settings after rendering.
+- Add an egui render-layout regression test that asserts the inspector header and next gallery content remain near the top of a 260-point sheet, not halfway through it.
+
+**Validation:** source/build tests do not substitute for screenshot-based iOS verification. Confirm visible group chips, preset tiles, strength/Apply/Cancel and whole-photo preview in Safari and installed Home Screen mode. Keep original photos and backups; never clear website data to refresh the app.
+
 # LightCraft Local: mobile UX architecture and acceptance specification
 
 **Status:** M2 responsive workspace plus a new correction-category and visual-preset implementation; physical iOS acceptance is still required.  
