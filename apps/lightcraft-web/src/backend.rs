@@ -1,7 +1,9 @@
-//! Browser storage, asynchronous: OPFS (Origin Private File System) when the page can write it
-//! from the main thread (`FileSystemFileHandle.createWritable`), else IndexedDB. Used from the
-//! window and from render workers alike. Keys are `/`-separated paths (OPFS directories; plain
-//! IndexedDB keys).
+//! Asynchronous LightCraft library storage.
+//! In the signed iOS app, Capacitor's native Filesystem bridge stores all
+//! library files and original photos inside Documents/LightCraft; no OPFS or
+//! IndexedDB fallback is allowed for this app.
+//! Separately, the browser/PWA build continues to use OPFS when writable,
+//! falling back to IndexedDB. Keys remain `/`-separated relative paths.
 
 use js_sys::{Function, Object, Reflect, Uint8Array};
 use wasm_bindgen::prelude::*;
