@@ -63,6 +63,10 @@ test("prototype is a separate route with a Rust import and command bridge", () =
   assert.match(rust, /fn is_mobile_lab\(\) -> bool/);
   assert.match(rust, /pub fn import_browser_files\(files: web_sys::FileList\)/);
   assert.match(rust, /self\.app\.ui\.fullscreen = fullscreen;/);
+  assert.match(rust, /fn mobile_lab_notice\(text: &str\)/);
+  assert.match(html, /id="mobile_notice"/);
+  assert.match(html, /id="mobile_notice_dialog"/);
+  assert.match(css, /\.mobile-notice \{/);
 });
 
 test("mobile layout honors device safe areas and reserves the photo canvas", () => {
