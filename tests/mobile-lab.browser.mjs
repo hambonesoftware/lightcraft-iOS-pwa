@@ -172,6 +172,48 @@ try {
   await page.locator("#library_dialog").waitFor({ state: "hidden" });
   await page.evaluate(async () => lightcraft.command("view.zoomFit", "{}"));
   await page.getByRole("tab", { name: "Light" }).click();
+
+  // Two-finger mobile gestures must move the existing WebGL canvas immediately
+  // while the Rust editor receives one final navigation commit after release.
+  await pollRust("web.viewport", {}, view =>
+    view?.imageRect?.width > 0 && view?.canvasRect?.width > 0 && view?.source ? view : false, 20000);
+  await page.waitForTimeout(120);
+  const compositorResponded = await page.evaluate(async () => {
+    const canvas = document.getElementById("lightcraft_canvas");
+    const viewport = document.getElementById("lightcraft_viewport");
+    const rect = viewport.getBoundingClientRect();
+    function send(type, positions) {
+      const touches = positions.map(([x, y], id) => new Touch({
+        identifier: id + 1, target: canvas,
+        clientX: rect.left + x, clientY: rect.top + y,
+        pageX: rect.left + x, pageY: rect.top + y
+      }));
+      const event = new TouchEvent(type, {
+        touches, targetTouches: touches, changedTouches: touches,
+        bubbles: true, cancelable: true
+      });
+      canvas.dispatchEvent(event);
+    }
+    const center = rect.width / 2;
+    send("touchstart", [[center - 20, 120]]);
+    send("touchstart", [[center - 20, 120], [center + 20, 120]]);
+    send("touchmove", [[center - 37, 120], [center + 37, 120]]);
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    const transformed = canvas.style.transform.includes("scale(");
+    send("touchend", []);
+    return transformed;
+  });
+  assert.equal(compositorResponded, true,
+    "pinch should transform the existing canvas on the compositor, not wait for image rendering");
+  await pollRust("web.viewport", {}, view =>
+    view.zoom && typeof view.zoom === "object" && view.zoom.percent > 0, 20000);
+  await page.waitForFunction(() => document.getElementById("lightcraft_canvas").style.transform === "",
+    { timeout: 20000 });
+  await page.getByRole("button", { name: "Zoom out" }).click();
+  await page.getByRole("button", { name: "Zoom in" }).click();
+  await page.getByRole("button", { name: "Fit", exact: true }).click();
+  await pollRust("web.viewport", {}, view => view.zoom === "fit", 20000);
+
   await page.screenshot({ path: reportDir + "/phone-light.png", fullPage: true });
 
   await page.getByRole("tab", { name: "Color" }).click();
