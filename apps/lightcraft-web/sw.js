@@ -16,6 +16,8 @@ const SHELL_PATHS = [
   "./backup-files.mjs",
   "./saved-photos.mjs",
   "./saved-photos-ui.mjs",
+  "./mobile-performance.mjs",
+  "./mobile-gestures.mjs",
   "./worker.js",
   "./lightcraft_web.js",
   "./lightcraft_web_bg.wasm",
