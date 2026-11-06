@@ -359,7 +359,7 @@ async fn boot(opts: Options) -> Boot {
         match Backend::open(opts.store == "idb").await {
             Ok(b) => Some(b),
             Err(e) => {
-                log::error!("no browser storage ({e}); this session won't be saved");
+                log::error!("no persistent storage ({e}); this session won't be saved");
                 None
             }
         }
@@ -568,10 +568,16 @@ impl WebApp {
         }
         app.ui = app.ui.sanitized();
         app.library_problem = problem;
-        let n = opts.workers.unwrap_or_else(|| {
-            let cores = window().map_or(1, |w| w.navigator().hardware_concurrency() as usize);
-            if is_ios_device() { 1 } else { cores.saturating_sub(1).clamp(1, 4) }
-        });
+        // Capacitor's native filesystem bridge works only on the WebView main thread.
+        // Avoid spawning workers that would otherwise fall back to browser storage.
+        let n = if backend.as_ref().is_some_and(|b| b.kind() == "native") {
+            0
+        } else {
+            opts.workers.unwrap_or_else(|| {
+                let cores = window().map_or(1, |w| w.navigator().hardware_concurrency() as usize);
+                if is_ios_device() { 1 } else { cores.saturating_sub(1).clamp(1, 4) }
+            })
+        };
         let cache = app.session.media.rendered.clone();
         let workers = (n > 0).then(|| {
             Workers::start(
