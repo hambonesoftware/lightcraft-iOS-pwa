@@ -6,9 +6,12 @@
   <meta name="theme-color" content="#191a1d">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>LightCraft • Mobile Studio Prototype</title>
-  <meta name="description" content="An experimental touch-native LightCraft photo editing workspace powered by the real local Rust/WASM engine.">
-  <link rel="icon" href="data:,">
+  <title>LightCraft Local • Studio</title>
+  <meta name="description" content="LightCraft Local: a touch-first, on-device photo editing studio powered by Rust.">
+  <meta name="apple-mobile-web-app-title" content="LightCraft Local">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icon-256.png">
+  <link rel="icon" href="./icon-256.png">
   <link rel="stylesheet" href="./mobile-lab.css">
 </head>
 <body>
@@ -55,7 +58,7 @@
     </div>
 
     <section class="edit-console" aria-label="Mobile editing controls">
-      <div class="grabber" aria-hidden="true"></div>
+      <button id="panel_toggle" type="button" class="grabber-button" aria-label="Collapse adjustments" aria-expanded="true"><span class="grabber" aria-hidden="true"></span></button>
       <div class="console-heading">
         <div>
           <span class="eyebrow">ADJUSTMENTS</span>
@@ -65,7 +68,8 @@
       </div>
       <div id="adjustment_controls" class="adjustment-scroller" aria-label="Photo adjustments"></div>
       <nav id="category_tabs" class="category-tabs" role="tablist" aria-label="Editing categories">
-        <button role="tab" aria-selected="true" data-category="light">Light</button>
+        <button role="tab" aria-selected="false" data-category="looks" tabindex="-1">Looks</button>
+        <button role="tab" aria-selected="true" data-category="light" tabindex="0">Light</button>
         <button role="tab" aria-selected="false" data-category="color">Color</button>
         <button role="tab" aria-selected="false" data-category="effects">Effects</button>
         <button role="tab" aria-selected="false" data-category="detail">Detail</button>
@@ -81,7 +85,7 @@
         </div>
         <button id="close_library" class="close-button" type="button" aria-label="Close library">Done</button>
       </div>
-      <p class="privacy-caption">Your original photos and edits stay in LightCraft’s existing browser storage. Back up important libraries from the original editor.</p>
+      <p class="privacy-caption">Your original photos and edits stay in LightCraft’s existing browser storage. Back up important photographs regularly; clearing browser website data can delete the local library.</p>
       <button id="import_photo" type="button" class="import-button">+ Import photographs</button>
       <div id="library_count" class="library-count" role="status"></div>
       <div id="library_items" class="library-items"></div>
@@ -90,6 +94,14 @@
     <div id="toast" role="status" aria-live="polite" class="toast" hidden></div>
   </div>
 
+  <script>
+    if ("serviceWorker" in navigator && window.isSecureContext) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./sw.js", { scope: "./" })
+          .catch(error => console.warn("Offline installation unavailable:", error));
+      });
+    }
+  </script>
   <script type="module">
     import init, { start, command, import_browser_files } from "./lightcraft_web.js";
     import { mountMobileStudio } from "./mobile-lab.mjs";
