@@ -3,6 +3,22 @@
 >
 > **Original source:** [storytold/lightcraft](https://github.com/storytold/lightcraft) · **Original website:** [getartcraft.com/apps/lightcraft](https://getartcraft.com/apps/lightcraft) · **This fork:** [hambonesoftware/lightcraft-iOS-pwa](https://github.com/hambonesoftware/lightcraft-iOS-pwa)
 
+## Native iOS build with real Documents storage
+
+The **installed iPhone/iPad edition** lives in
+[native/ios-app](native/ios-app/README.md). Unlike the browser PWA, it stores
+imported originals, photo catalog and edits, exports and backups in the
+**app's native iOS Documents directory**, using Capacitor's Filesystem
+bridge. The original Rust/WebAssembly image engine and new touch-first Mobile
+Studio interface remain unchanged. The native build requires Xcode and iOS
+app signing; a GitHub Pages link or Add to Home Screen cannot create a native
+app container. Current builds are in developer validation; the installed
+app has not yet been signed and distributed.
+
+**Important:** the old browser/PWA library does not automatically migrate.
+Back up the web library to a ZIP and restore it in the installed native app.
+Do not delete the old app or its browser data before verifying that restore.
+
 ## LightCraft Local — same engine, mobile-first frontend
 
 **Original LightCraft image engine. A new mobile-first way to use it.** This fork retains the upstream **Rust/WebAssembly non-destructive photo processing, rendering, existing catalog, presets and editing commands**. The focus of this fork is the **interface**: iPhone/iPad-friendly navigation, touch-sized controls, compact correction categories, a photo-first workspace, presets, and installable PWA support. It is not a separate photo engine or a ground-up rewrite.
