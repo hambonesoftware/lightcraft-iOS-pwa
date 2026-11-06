@@ -8,6 +8,7 @@
  */
 
 export const CATEGORY_SECTIONS = Object.freeze({
+  looks: [],
   light: ["light", "curve"],
   color: ["color", "mixer", "bwMix", "grading", "pointColor", "calibration"],
   effects: ["effects", "vignette", "grain"],
@@ -16,6 +17,7 @@ export const CATEGORY_SECTIONS = Object.freeze({
 });
 
 export const CATEGORY_LABELS = Object.freeze({
+  looks: "Looks",
   light: "Light",
   color: "Color",
   effects: "Effects",
@@ -77,7 +79,9 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
   let activeId = null;
   let catalog = [];
   let specs = [];
-  let busy = false;
+  let presets = [];
+  let lookGroup = "All";
+  let lastAppliedPreset = null;
   let mutations = Promise.resolve();
   let toastTimer = null;
 
@@ -116,8 +120,114 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
     el("compare_photo").disabled = activeId === null;
   }
 
+
+  function renderLooks() {
+    controlsContainer.replaceChildren();
+    controlsContainer.scrollTop = 0;
+    if (activeId === null) {
+      const empty = document.createElement("p");
+      empty.className = "empty-adjustments";
+      empty.textContent = "Choose a photograph to apply a look.";
+      controlsContainer.append(empty);
+      return;
+    }
+
+    const search = document.createElement("input");
+    search.type = "search";
+    search.className = "looks-search";
+    search.placeholder = "Find a look";
+    search.setAttribute("aria-label", "Search looks");
+    const groups = ["All", "Favorites", ...new Set(presets.map(item => String(item.group || "Other")))];
+    const picker = document.createElement("div");
+    picker.className = "looks-groups";
+    picker.setAttribute("aria-label", "Filter looks by group");
+    const gallery = document.createElement("div");
+    gallery.className = "looks-gallery";
+
+    const draw = () => {
+      picker.replaceChildren();
+      for (const group of groups) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "looks-chip";
+        chip.textContent = group;
+        chip.setAttribute("aria-pressed", String(lookGroup === group));
+        chip.addEventListener("click", () => {
+          lookGroup = group;
+          draw();
+        });
+        picker.append(chip);
+      }
+      gallery.replaceChildren();
+      const query = search.value.trim().toLocaleLowerCase();
+      const matching = presets.filter(preset =>
+        (lookGroup === "All" ||
+          (lookGroup === "Favorites" && preset.favorite) ||
+          preset.group === lookGroup) &&
+        (!query || String(preset.name).toLocaleLowerCase().includes(query))
+      );
+      for (const preset of matching.slice(0, 90)) {
+        const item = document.createElement("div");
+        item.className = "look-item";
+        if (lastAppliedPreset === preset.id) item.classList.add("selected");
+        const apply = document.createElement("button");
+        apply.type = "button";
+        apply.className = "look-apply";
+        apply.disabled = activeId === null;
+        apply.setAttribute("aria-label", "Apply " + preset.name);
+        const graphic = document.createElement("span");
+        graphic.className = "look-symbol";
+        graphic.setAttribute("aria-hidden", "true");
+        graphic.textContent = "◈";
+        const name = document.createElement("span");
+        name.className = "look-name";
+        name.textContent = String(preset.name);
+        const group = document.createElement("span");
+        group.className = "look-meta";
+        group.textContent = String(preset.group || "Look");
+        apply.append(graphic, name, group);
+        apply.addEventListener("click", () => submit(async () => {
+          await call("preset.apply", { id: preset.id, amount: 100 });
+          lastAppliedPreset = preset.id;
+          await refreshState();
+        }));
+        const favorite = document.createElement("button");
+        favorite.type = "button";
+        favorite.className = "look-favorite";
+        favorite.textContent = preset.favorite ? "★" : "☆";
+        favorite.setAttribute("aria-label", (preset.favorite ? "Remove favorite " : "Favorite ") + preset.name);
+        favorite.setAttribute("aria-pressed", String(Boolean(preset.favorite)));
+        favorite.addEventListener("click", () => submit(async () => {
+          await call("preset.favorite", { id: preset.id, favorite: !preset.favorite });
+          await refreshState();
+        }));
+        item.append(apply, favorite);
+        gallery.append(item);
+      }
+      if (!matching.length) {
+        const empty = document.createElement("p");
+        empty.className = "empty-adjustments";
+        empty.textContent = presets.length ? "No looks match your search." : "No looks are available.";
+        gallery.append(empty);
+      } else if (matching.length > 90) {
+        const more = document.createElement("p");
+        more.className = "look-overflow";
+        more.textContent = "Showing 90 of " + matching.length + " looks. Use search or a group to narrow the list.";
+        gallery.append(more);
+      }
+    };
+    search.addEventListener("input", draw);
+    controlsContainer.append(search, picker, gallery);
+    draw();
+  }
+
   function renderControls() {
     el("panel_title").textContent = CATEGORY_LABELS[activeCategory] || "Adjustments";
+    if (activeCategory === "looks") {
+      renderLooks();
+      updateHeader();
+      return;
+    }
     const all = controlsForCategory(specs, activeCategory);
     controlsContainer.replaceChildren();
     controlsContainer.scrollTop = 0;
@@ -256,6 +366,7 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
           await call("library.select", { ids: [photo.id], active: photo.id });
           await call("view.zoomFit");
           activeId = photo.id;
+          lastAppliedPreset = null;
           await refreshState();
           libraryDialog.close();
         });
@@ -265,14 +376,18 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
   }
 
   async function refreshState() {
-    const [library, controls, photos] = await Promise.all([
+    const [library, controls, photos, availablePresets] = await Promise.all([
       call("library.state"),
       call("develop.controls"),
-      call("catalog.query", { filter: {}, limit: 200, offset: 0 })
+      call("catalog.query", { filter: {}, limit: 200, offset: 0 }),
+      call("presets.list")
     ]);
-    activeId = activePhotoId(library);
+    const selected = activePhotoId(library);
+    if (selected !== activeId) lastAppliedPreset = null;
+    activeId = selected;
     catalog = Array.isArray(photos?.photos) ? photos.photos : [];
     specs = Array.isArray(controls) ? controls : [];
+    presets = Array.isArray(availablePresets) ? availablePresets : [];
     renderLibrary();
     renderControls();
   }
@@ -296,6 +411,11 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
   function useCategory(category) {
     if (!CATEGORY_SECTIONS[category]) return;
     activeCategory = category;
+    if (document.documentElement.classList.contains("studio-immersive")) {
+      document.documentElement.classList.remove("studio-immersive");
+      el("panel_toggle").setAttribute("aria-expanded", "true");
+      el("panel_toggle").setAttribute("aria-label", "Collapse adjustments");
+    }
     for (const tab of tabs) {
       const active = tab.dataset.category === category;
       tab.setAttribute("aria-selected", String(active));
@@ -306,7 +426,20 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
 
   for (const tab of tabs) {
     tab.addEventListener("click", () => useCategory(tab.dataset.category));
+    tab.addEventListener("keydown", event => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      const direction = event.key === "ArrowRight" ? 1 : -1;
+      const next = tabs[(tabs.indexOf(tab) + direction + tabs.length) % tabs.length];
+      useCategory(next.dataset.category);
+      next.focus();
+    });
   }
+  el("panel_toggle").addEventListener("click", () => {
+    const expanded = document.documentElement.classList.toggle("studio-immersive") === false;
+    el("panel_toggle").setAttribute("aria-expanded", String(expanded));
+    el("panel_toggle").setAttribute("aria-label", expanded ? "Collapse adjustments" : "Expand adjustments");
+  });
   el("mobile_notice_open").addEventListener("click", () => {
     el("mobile_notice_dialog").showModal();
   });
