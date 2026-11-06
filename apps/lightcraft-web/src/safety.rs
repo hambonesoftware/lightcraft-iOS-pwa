@@ -149,6 +149,19 @@ pub fn download_blob(name: &str, blob: &web_sys::Blob) -> Result<(), String> {
     Ok(())
 }
 
+/// Stage a full library ZIP for a second, user-initiated iOS share-sheet action.
+/// Creating the ZIP happens asynchronously; sharing immediately would lose the
+/// transient user activation required by Safari. Without a DOM receiver, keep
+/// the original download behavior for callers outside Mobile Studio.
+fn deliver_backup(name: &str, blob: &web_sys::Blob) -> Result<(), String> {
+    let receiver = Reflect::get(&js_sys::global(), &"lightcraftReceiveBackup".into()).map_err(|e| format!("{e:?}"))?;
+    if let Some(callback) = receiver.dyn_ref::<js_sys::Function>() {
+        callback.call2(&JsValue::NULL, blob.as_ref(), &JsValue::from_str(name)).map_err(|e| format!("staging backup: {e:?}"))?;
+        return Ok(());
+    }
+    download_blob(name, blob)
+}
+
 /// File ▸ Back Up Library…: a zip of the library files (as the app has them, saved or not) and
 /// every original in storage, built entry by entry into the browser's memory (outside the wasm
 /// heap) and downloaded. `names`: content hash → the photo's file name.
@@ -190,7 +203,7 @@ pub async fn backup(files: Files, backend: Backend, names: HashMap<String, Strin
     opts.set_type("application/zip");
     let blob = web_sys::Blob::new_with_u8_array_sequence_and_options(&parts, &opts).map_err(|e| format!("{e:?}"))?;
     let day: String = String::from(js_sys::Date::new_0().to_iso_string()).chars().take(10).collect();
-    download_blob(&format!("lightcraft-library-backup-{day}.zip"), &blob)?;
+    deliver_backup(&format!("lightcraft-library-backup-{day}.zip"), &blob)?;
     Ok((originals, bytes + tail.len() as f64))
 }
 

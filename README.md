@@ -15,6 +15,23 @@
 | Browser install | Upstream WebAssembly editor | iOS/iPadOS Home Screen PWA packaging, GitHub Pages deployment and offline app-shell caching |
 | Experimental alternative interface | Upstream Rust/egui image loupe and command bridge | [Mobile Studio](apps/lightcraft-web/mobile-lab.html) adds an HTML/CSS/JS touch frontend that **calls the original Rust/WASM engine**, not duplicate filters |
 
+### Local-first PWA storage and independent backups
+
+Like [PlantIt](https://github.com/hambonesoftware/plantit), this PWA stores its working
+library **on your device** in WebKit's private OPFS/IndexedDB data store. It is not
+a native filesystem directory, and clearing website/app data can remove it.
+To keep an independent copy that survives a browser-data erase, open **Photo
+library → Prepare complete library backup → Share / Save to Files**, choose
+**On My iPhone**, and verify that the ZIP exists in the iPhone's Files app.
+**Restore complete library from ZIP** uses LightCraft's existing validated Rust
+backup/restore system to recover originals, edits, and the catalog.
+
+The prepared in-memory ZIP is **not yet saved**; Safari requires another user
+tap to show the Files share sheet. Where the share sheet cannot share ZIP files,
+**Download backup ZIP** is available as an alternative. These ZIP backups are
+not encrypted. See [iOS PWA backup and restore details](docs/pwa-files-safety.md).
+No Mac or Xcode is required for this PWA workflow.
+
 **Credit:** LightCraft was created by the **[ArtCraft team and open-source contributors](https://github.com/storytold/lightcraft)**. All original image processing, rendering, and extensive core features should be credited to them. Our work is a mobile-focused community adaptation. The longer feature descriptions below are derived from upstream documentation and do not claim new authorship or complete feature parity on iOS.
 
 This is still evolving: advanced mobile gestures, imports/exports and browser-storage durability need physical device testing. Original images and edits remain in the existing device-local browser library; browser data can be deleted or evicted, so maintain backups. See [iOS/PWA setup and storage guidance](PWA-IOS.md) and the [mobile UX plan](MOBILE_UX_SPEC.md).

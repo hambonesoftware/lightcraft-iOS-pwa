@@ -13,6 +13,7 @@ const SHELL_PATHS = [
   "./mobile-lab.html",
   "./mobile-lab.css",
   "./mobile-lab.mjs",
+  "./backup-files.mjs",
   "./worker.js",
   "./lightcraft_web.js",
   "./lightcraft_web_bg.wasm",

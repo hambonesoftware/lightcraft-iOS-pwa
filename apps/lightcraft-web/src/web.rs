@@ -32,9 +32,6 @@ fn accept_list() -> String {
 /// After a failed save, wait this long before trying again (ms).
 const SAVE_RETRY_MS: f64 = 2000.0;
 
-/// How long a notice stays on screen (s).
-const NOTICE_SECS: f64 = 8.0;
-
 /// How often view state, UI prefs and the thumbnail index are saved (ms).
 const SAVE_EVERY_MS: f64 = 1000.0;
 
@@ -43,8 +40,8 @@ fn window() -> Option<web_sys::Window> {
     web_sys::window()
 }
 
-/// On the opt-in mobile route, browser safety notices belong to accessible
-/// DOM chrome, not the desktop egui toast over the photo renderer.
+/// Browser safety notices belong to accessible DOM chrome, never to a
+/// desktop toast obscuring the photograph.
 /// Keep the full warning available to read; never silently discard it.
 fn mobile_lab_notice(text: &str) {
     let Some(document) = window().and_then(|w| w.document()) else {
@@ -56,12 +53,6 @@ fn mobile_lab_notice(text: &str) {
     if let Some(banner) = document.get_element_by_id("mobile_notice") {
         let _ = banner.remove_attribute("hidden");
     }
-}
-
-/// The separate /mobile-lab.html route pilots a DOM-controlled phone
-/// workspace. The standard index.html and all desktop UI remain untouched.
-fn is_mobile_lab() -> bool {
-    window().and_then(|w| w.location().pathname().ok()).is_some_and(|path| path.ends_with("/mobile-lab.html"))
 }
 
 /// iPadOS may advertise itself as a desktop Mac, so also inspect touch support.
@@ -157,7 +148,7 @@ async fn read_file(originals: Originals, backend: Option<Backend>, file: web_sys
 // file.addPhotos indirectly through an async WASM command would lose iOS Safari
 // user activation before the browser picker can open.
 thread_local! {
-    static MOBILE_LAB_IMPORT: std::cell::RefCell<Option<(Originals, Option<Backend>, egui::Context)>> =
+    static MOBILE_LAB_IMPORT: std::cell::RefCell<Option<(Originals, Option<Backend>, egui::Context, Rc<Cell<bool>>)>> =
         const { std::cell::RefCell::new(None) };
 }
 
@@ -167,7 +158,7 @@ thread_local! {
 #[wasm_bindgen]
 pub fn import_browser_files(files: web_sys::FileList) {
     let host = MOBILE_LAB_IMPORT.with(|i| i.borrow().clone());
-    let Some((originals, backend, ctx)) = host else {
+    let Some((originals, backend, ctx, _)) = host else {
         log::warn!("mobile prototype picker used before LightCraft finished opening");
         return;
     };
@@ -176,6 +167,42 @@ pub fn import_browser_files(files: web_sys::FileList) {
             wasm_bindgen_futures::spawn_local(read_file(originals.clone(), backend.clone(), file, ctx.clone()));
         }
     }
+}
+
+/// Restore a LightCraft ZIP chosen through a genuine HTML file picker.
+/// Uses the verified, non-destructive Rust restore path; existing photos and
+/// edits remain untouched on failure.
+#[wasm_bindgen]
+pub fn restore_browser_backup_file(file: web_sys::File) {
+    let host = MOBILE_LAB_IMPORT.with(|i| i.borrow().clone());
+    let Some((_, Some(backend), ctx, frozen)) = host else {
+        notice("Cannot restore: the local library storage is not ready.");
+        return;
+    };
+    if !file.name().to_ascii_lowercase().ends_with(".zip") {
+        notice("Select a LightCraft ZIP backup, not an image or another file.");
+        return;
+    }
+    notice(format!("Validating the selected backup {}…", file.name()));
+    wasm_bindgen_futures::spawn_local(async move {
+        match safety::restore(file, backend).await {
+            Ok(_) => {
+                // Freeze the old session's writes before reloading the newly
+                // restored catalog. The archive itself was fully verified.
+                frozen.set(true);
+                notice("Backup verified and restored; reopening the library.");
+                if let Some(window) = window() {
+                    if let Err(error) = window.location().reload() {
+                        notice(format!("Restore completed but reload failed: {error:?}. Reopen LightCraft."));
+                    }
+                }
+            }
+            Err(error) => {
+                notice(format!("Restore failed: {error}. Your existing library remains intact."));
+                ctx.request_repaint();
+            }
+        }
+    });
 }
 
 /// Show the browser's open dialog; picked files are imported asynchronously.
@@ -251,11 +278,11 @@ fn services(originals: Originals, backend: Option<Backend>, files: Files, frozen
                 })
                 .collect();
             let files = backup_files.clone();
-            notice("Backing up the library… (the download starts when it's ready)");
+            notice("Building your complete backup… You must save the ZIP to Files once it is prepared.");
             wasm_bindgen_futures::spawn_local(async move {
                 match safety::backup(files, b, names).await {
                     Ok((n, bytes)) => notice(format!(
-                        "Library backed up: {n} original{} ({:.1} MB). Keep the file somewhere safe.",
+                        "Backup prepared: {n} original{} ({:.1} MB). Tap Share / Save to Files now, then verify the ZIP in Files.",
                         if n == 1 { "" } else { "s" },
                         bytes / 1e6
                     )),
@@ -463,7 +490,6 @@ async fn boot(opts: Options) -> Boot {
 struct WebApp {
     app: LightcraftApp,
     /// This is an opt-in prototype route, not a new app or separate library.
-    mobile_lab: bool,
     originals: Originals,
     files: Files,
     backend: Option<Backend>,
@@ -599,16 +625,13 @@ impl WebApp {
         }
         log::info!("lightcraft: {n} render workers");
         CTX.with(|c| *c.borrow_mut() = Some(cc.egui_ctx.clone()));
-        let mobile_lab = is_mobile_lab();
-        if mobile_lab {
-            MOBILE_LAB_IMPORT.with(|i| {
-                *i.borrow_mut() = Some((originals.clone(), backend.clone(), cc.egui_ctx.clone()));
-            });
-        }
+        // One web application only: DOM Mobile Studio controls the Rust renderer.
+        MOBILE_LAB_IMPORT.with(|i| {
+            *i.borrow_mut() = Some((originals.clone(), backend.clone(), cc.egui_ctx.clone(), frozen.clone()));
+        });
         let origin = lightcraft_ui_egui::monotonic_ms();
         WebApp {
             app,
-            mobile_lab,
             originals,
             files,
             backend,
@@ -797,12 +820,7 @@ impl eframe::App for WebApp {
     /// load originals the UI requested, apply the cache budget, run the app's logic, then save.
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         for text in safety::take_notices() {
-            if self.mobile_lab {
-                mobile_lab_notice(&text);
-            } else {
-                let now = self.app.tick_now();
-                self.app.ui.toast = Some((text, now + NOTICE_SECS, None));
-            }
+            mobile_lab_notice(&text);
         }
         self.run_inbox();
         self.load_originals(ctx);
@@ -829,32 +847,24 @@ impl eframe::App for WebApp {
         // blocking library window (over an already open library) keeps a stored drop queued.
         let ctx = ui.ctx().clone();
         self.import_dropped(&ctx);
-        if self.mobile_lab {
-            // Route any pending engine-generated warning to a small, readable
-            // native notice instead of an oversized egui toast over the photo.
-            if let Some((message, _, _)) = self.app.ui.toast.take() {
-                mobile_lab_notice(&message);
-            }
-            // A photo-only egui canvas is the *actual* LightCraft renderer,
-            // controlled by accessible HTML sliders via the command bridge.
-            // Fullscreen is restored before saving UI state, avoiding pollution
-            // of the normal desktop or original PWA layout preferences.
-            let fullscreen = self.app.ui.fullscreen;
-            let navigator = self.app.ui.navigator;
-            let face_boxes = self.app.ui.face_boxes;
-            let filmstrip = self.app.ui.filmstrip;
-            self.app.ui.fullscreen = true;
-            self.app.ui.navigator = false;
-            self.app.ui.face_boxes = false;
-            self.app.ui.filmstrip = false;
-            self.app.ui(ui);
-            self.app.ui.fullscreen = fullscreen;
-            self.app.ui.navigator = navigator;
-            self.app.ui.face_boxes = face_boxes;
-            self.app.ui.filmstrip = filmstrip;
-        } else {
-            self.app.ui(ui);
+        // The web app has no legacy editor route. egui only supplies the
+        // real photograph renderer; all user-facing controls live in the DOM.
+        if let Some((message, _, _)) = self.app.ui.toast.take() {
+            mobile_lab_notice(&message);
         }
+        let fullscreen = self.app.ui.fullscreen;
+        let navigator = self.app.ui.navigator;
+        let face_boxes = self.app.ui.face_boxes;
+        let filmstrip = self.app.ui.filmstrip;
+        self.app.ui.fullscreen = true;
+        self.app.ui.navigator = false;
+        self.app.ui.face_boxes = false;
+        self.app.ui.filmstrip = false;
+        self.app.ui(ui);
+        self.app.ui.fullscreen = fullscreen;
+        self.app.ui.navigator = navigator;
+        self.app.ui.face_boxes = face_boxes;
+        self.app.ui.filmstrip = filmstrip;
         // eframe's web runner ignores `ViewportCommand::Title`: name the open photo in the page title
         let title = self.app.page_title(self.files.is_dirty() || self.flushing.get());
         if title != self.title

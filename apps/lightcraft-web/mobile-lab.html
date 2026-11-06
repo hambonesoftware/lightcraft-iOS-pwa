@@ -6,9 +6,12 @@
   <meta name="theme-color" content="#191a1d">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>LightCraft • Mobile Studio Prototype</title>
-  <meta name="description" content="An experimental touch-native LightCraft photo editing workspace powered by the real local Rust/WASM engine.">
-  <link rel="icon" href="data:,">
+  <title>LightCraft Local • Studio</title>
+  <meta name="description" content="LightCraft Local: a touch-first, on-device photo editing studio powered by Rust.">
+  <meta name="apple-mobile-web-app-title" content="LightCraft Local">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icon-256.png">
+  <link rel="icon" href="./icon-256.png">
   <link rel="stylesheet" href="./mobile-lab.css">
 </head>
 <body>
@@ -55,7 +58,7 @@
     </div>
 
     <section class="edit-console" aria-label="Mobile editing controls">
-      <div class="grabber" aria-hidden="true"></div>
+      <button id="panel_toggle" type="button" class="grabber-button" aria-label="Collapse adjustments" aria-expanded="true"><span class="grabber" aria-hidden="true"></span></button>
       <div class="console-heading">
         <div>
           <span class="eyebrow">ADJUSTMENTS</span>
@@ -65,7 +68,8 @@
       </div>
       <div id="adjustment_controls" class="adjustment-scroller" aria-label="Photo adjustments"></div>
       <nav id="category_tabs" class="category-tabs" role="tablist" aria-label="Editing categories">
-        <button role="tab" aria-selected="true" data-category="light">Light</button>
+        <button role="tab" aria-selected="false" data-category="looks" tabindex="-1">Looks</button>
+        <button role="tab" aria-selected="true" data-category="light" tabindex="0">Light</button>
         <button role="tab" aria-selected="false" data-category="color">Color</button>
         <button role="tab" aria-selected="false" data-category="effects">Effects</button>
         <button role="tab" aria-selected="false" data-category="detail">Detail</button>
@@ -81,8 +85,18 @@
         </div>
         <button id="close_library" class="close-button" type="button" aria-label="Close library">Done</button>
       </div>
-      <p class="privacy-caption">Your original photos and edits stay in LightCraft’s existing browser storage. Back up important libraries from the original editor.</p>
+      <p class="privacy-caption">Your originals and edits live on this device, in private web-app storage. Back up important photographs regularly: uninstalling the app, clearing its data, or storage eviction may delete the local library.</p>
+      <p id="storage_status" class="storage-status" role="status" aria-live="polite">Checking available device storage…</p>
       <button id="import_photo" type="button" class="import-button">+ Import photographs</button>
+      <button id="backup_library" type="button" class="backup-button">Prepare complete library backup</button>
+      <section id="backup_ready" class="backup-ready" aria-label="Library backup ready to save" hidden>
+        <p id="backup_message" role="status" aria-live="polite">Backup prepared in memory. It is not yet stored outside LightCraft.</p>
+        <button id="share_backup" type="button" class="backup-button backup-primary">Share / Save to Files</button>
+        <button id="download_backup" type="button" class="backup-button">Download backup ZIP</button>
+        <p class="privacy-caption">Choose Save to Files → On My iPhone in the share sheet, then verify the ZIP in Files. Clearing browser data cannot erase a separate copy saved there.</p>
+      </section>
+      <button id="restore_backup" type="button" class="backup-button">Restore complete library from ZIP</button>
+      <input id="restore_backup_picker" type="file" accept=".zip,application/zip" hidden>
       <div id="library_count" class="library-count" role="status"></div>
       <div id="library_items" class="library-items"></div>
     </dialog>
@@ -90,8 +104,16 @@
     <div id="toast" role="status" aria-live="polite" class="toast" hidden></div>
   </div>
 
+  <script>
+    if ("serviceWorker" in navigator && window.isSecureContext) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./sw.js", { scope: "./" })
+          .catch(error => console.warn("Offline installation unavailable:", error));
+      });
+    }
+  </script>
   <script type="module">
-    import init, { start, command, import_browser_files } from "./lightcraft_web.js";
+    import init, { start, command, import_browser_files, restore_browser_backup_file } from "./lightcraft_web.js";
     import { mountMobileStudio } from "./mobile-lab.mjs";
 
     (async () => {
@@ -106,7 +128,7 @@
       await init({ module_or_path: module });
       globalThis.lightcraft = { command };
       start(font);
-      mountMobileStudio({ command, importBrowserFiles: import_browser_files });
+      mountMobileStudio({ command, importBrowserFiles: import_browser_files, restoreBrowserBackupFile: restore_browser_backup_file });
     })().catch(error => {
       console.error(error);
       document.getElementById("lightcraft_loading").textContent = "Could not open LightCraft Studio: " + String(error);

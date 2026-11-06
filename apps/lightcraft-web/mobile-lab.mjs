@@ -7,7 +7,10 @@
  * No photo data is sent to a server or saved in an alternate browser store.
  */
 
+import { createBackupHandoff } from "./backup-files.mjs";
+
 export const CATEGORY_SECTIONS = Object.freeze({
+  looks: [],
   light: ["light", "curve"],
   color: ["color", "mixer", "bwMix", "grading", "pointColor", "calibration"],
   effects: ["effects", "vignette", "grain"],
@@ -16,6 +19,7 @@ export const CATEGORY_SECTIONS = Object.freeze({
 });
 
 export const CATEGORY_LABELS = Object.freeze({
+  looks: "Looks",
   light: "Light",
   color: "Color",
   effects: "Effects",
@@ -62,8 +66,8 @@ export function fileTypeLabel(photo) {
 
 const el = id => document.getElementById(id);
 
-export function mountMobileStudio({ command, importBrowserFiles }) {
-  if (typeof command !== "function" || typeof importBrowserFiles !== "function") {
+export function mountMobileStudio({ command, importBrowserFiles, restoreBrowserBackupFile }) {
+  if (typeof command !== "function" || typeof importBrowserFiles !== "function" || typeof restoreBrowserBackupFile !== "function") {
     throw new TypeError("LightCraft WASM bridge and native import function are required");
   }
 
@@ -77,9 +81,29 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
   let activeId = null;
   let catalog = [];
   let specs = [];
-  let busy = false;
+  let presets = [];
+  let lookGroup = "All";
+  let lastAppliedPreset = null;
   let mutations = Promise.resolve();
   let toastTimer = null;
+  const backupHandoff = createBackupHandoff({
+    navigatorObject: navigator,
+    documentObject: document,
+    urlObject: URL,
+    FileConstructor: File,
+    onReady({ filename, size }) {
+      const sizeMb = Math.max(0.1, Math.round((size / (1024 * 1024)) * 10) / 10);
+      el("backup_message").textContent = filename + " (" + sizeMb + " MB) is ready. It is NOT saved in Files yet.";
+      el("backup_ready").hidden = false;
+    },
+    onNotice(message) {
+      notify(message);
+    }
+  });
+  // The ZIP is staged by Rust; the next actual button tap opens iOS Share,
+  // preserving Safari's transient user activation.
+  globalThis.lightcraftReceiveBackup = (blob, filename) => backupHandoff.stage(blob, filename);
+
 
   async function call(name, params = {}) {
     const raw = await command(name, JSON.stringify(params));
@@ -87,6 +111,35 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
       throw new Error("Unexpected response from LightCraft: " + name);
     }
     return JSON.parse(raw);
+  }
+
+  async function checkStorageDurability() {
+    const status = el("storage_status");
+    if (!status) return;
+    const storage = navigator.storage;
+    if (!storage || typeof storage.persisted !== "function") {
+      status.textContent = "This device does not report storage durability. Keep a separate photo backup.";
+      return;
+    }
+    try {
+      let persistent = await storage.persisted();
+      if (!persistent && typeof storage.persist === "function") {
+        // WebKit decides based on its own heuristics, including Home Screen use.
+        // Never claim that this guarantees the files cannot be deleted.
+        persistent = await storage.persist();
+      }
+      const estimate = typeof storage.estimate === "function"
+        ? await storage.estimate().catch(() => null)
+        : null;
+      const usedMb = estimate && Number.isFinite(estimate.usage)
+        ? " · approximately " + Math.round(estimate.usage / (1024 * 1024)) + " MB used"
+        : "";
+      status.textContent = persistent
+        ? "Persistent web-app storage granted" + usedMb + ". Backups are still required."
+        : "Web-app storage may be automatically evicted" + usedMb + ". Back up your originals.";
+    } catch {
+      status.textContent = "Storage protection could not be verified. Back up your originals.";
+    }
   }
 
   function notify(message) {
@@ -116,8 +169,114 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
     el("compare_photo").disabled = activeId === null;
   }
 
+
+  function renderLooks() {
+    controlsContainer.replaceChildren();
+    controlsContainer.scrollTop = 0;
+    if (activeId === null) {
+      const empty = document.createElement("p");
+      empty.className = "empty-adjustments";
+      empty.textContent = "Choose a photograph to apply a look.";
+      controlsContainer.append(empty);
+      return;
+    }
+
+    const search = document.createElement("input");
+    search.type = "search";
+    search.className = "looks-search";
+    search.placeholder = "Find a look";
+    search.setAttribute("aria-label", "Search looks");
+    const groups = ["All", "Favorites", ...new Set(presets.map(item => String(item.group || "Other")))];
+    const picker = document.createElement("div");
+    picker.className = "looks-groups";
+    picker.setAttribute("aria-label", "Filter looks by group");
+    const gallery = document.createElement("div");
+    gallery.className = "looks-gallery";
+
+    const draw = () => {
+      picker.replaceChildren();
+      for (const group of groups) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "looks-chip";
+        chip.textContent = group;
+        chip.setAttribute("aria-pressed", String(lookGroup === group));
+        chip.addEventListener("click", () => {
+          lookGroup = group;
+          draw();
+        });
+        picker.append(chip);
+      }
+      gallery.replaceChildren();
+      const query = search.value.trim().toLocaleLowerCase();
+      const matching = presets.filter(preset =>
+        (lookGroup === "All" ||
+          (lookGroup === "Favorites" && preset.favorite) ||
+          preset.group === lookGroup) &&
+        (!query || String(preset.name).toLocaleLowerCase().includes(query))
+      );
+      for (const preset of matching.slice(0, 90)) {
+        const item = document.createElement("div");
+        item.className = "look-item";
+        if (lastAppliedPreset === preset.id) item.classList.add("selected");
+        const apply = document.createElement("button");
+        apply.type = "button";
+        apply.className = "look-apply";
+        apply.disabled = activeId === null;
+        apply.setAttribute("aria-label", "Apply " + preset.name);
+        const graphic = document.createElement("span");
+        graphic.className = "look-symbol";
+        graphic.setAttribute("aria-hidden", "true");
+        graphic.textContent = "◈";
+        const name = document.createElement("span");
+        name.className = "look-name";
+        name.textContent = String(preset.name);
+        const group = document.createElement("span");
+        group.className = "look-meta";
+        group.textContent = String(preset.group || "Look");
+        apply.append(graphic, name, group);
+        apply.addEventListener("click", () => submit(async () => {
+          await call("preset.apply", { id: preset.id, amount: 100 });
+          lastAppliedPreset = preset.id;
+          await refreshState();
+        }));
+        const favorite = document.createElement("button");
+        favorite.type = "button";
+        favorite.className = "look-favorite";
+        favorite.textContent = preset.favorite ? "★" : "☆";
+        favorite.setAttribute("aria-label", (preset.favorite ? "Remove favorite " : "Favorite ") + preset.name);
+        favorite.setAttribute("aria-pressed", String(Boolean(preset.favorite)));
+        favorite.addEventListener("click", () => submit(async () => {
+          await call("preset.favorite", { id: preset.id, favorite: !preset.favorite });
+          await refreshState();
+        }));
+        item.append(apply, favorite);
+        gallery.append(item);
+      }
+      if (!matching.length) {
+        const empty = document.createElement("p");
+        empty.className = "empty-adjustments";
+        empty.textContent = presets.length ? "No looks match your search." : "No looks are available.";
+        gallery.append(empty);
+      } else if (matching.length > 90) {
+        const more = document.createElement("p");
+        more.className = "look-overflow";
+        more.textContent = "Showing 90 of " + matching.length + " looks. Use search or a group to narrow the list.";
+        gallery.append(more);
+      }
+    };
+    search.addEventListener("input", draw);
+    controlsContainer.append(search, picker, gallery);
+    draw();
+  }
+
   function renderControls() {
     el("panel_title").textContent = CATEGORY_LABELS[activeCategory] || "Adjustments";
+    if (activeCategory === "looks") {
+      renderLooks();
+      updateHeader();
+      return;
+    }
     const all = controlsForCategory(specs, activeCategory);
     controlsContainer.replaceChildren();
     controlsContainer.scrollTop = 0;
@@ -256,6 +415,7 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
           await call("library.select", { ids: [photo.id], active: photo.id });
           await call("view.zoomFit");
           activeId = photo.id;
+          lastAppliedPreset = null;
           await refreshState();
           libraryDialog.close();
         });
@@ -265,14 +425,18 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
   }
 
   async function refreshState() {
-    const [library, controls, photos] = await Promise.all([
+    const [library, controls, photos, availablePresets] = await Promise.all([
       call("library.state"),
       call("develop.controls"),
-      call("catalog.query", { filter: {}, limit: 200, offset: 0 })
+      call("catalog.query", { filter: {}, limit: 200, offset: 0 }),
+      call("presets.list")
     ]);
-    activeId = activePhotoId(library);
+    const selected = activePhotoId(library);
+    if (selected !== activeId) lastAppliedPreset = null;
+    activeId = selected;
     catalog = Array.isArray(photos?.photos) ? photos.photos : [];
     specs = Array.isArray(controls) ? controls : [];
+    presets = Array.isArray(availablePresets) ? availablePresets : [];
     renderLibrary();
     renderControls();
   }
@@ -296,6 +460,11 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
   function useCategory(category) {
     if (!CATEGORY_SECTIONS[category]) return;
     activeCategory = category;
+    if (document.documentElement.classList.contains("studio-immersive")) {
+      document.documentElement.classList.remove("studio-immersive");
+      el("panel_toggle").setAttribute("aria-expanded", "true");
+      el("panel_toggle").setAttribute("aria-label", "Collapse adjustments");
+    }
     for (const tab of tabs) {
       const active = tab.dataset.category === category;
       tab.setAttribute("aria-selected", String(active));
@@ -306,7 +475,20 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
 
   for (const tab of tabs) {
     tab.addEventListener("click", () => useCategory(tab.dataset.category));
+    tab.addEventListener("keydown", event => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      const direction = event.key === "ArrowRight" ? 1 : -1;
+      const next = tabs[(tabs.indexOf(tab) + direction + tabs.length) % tabs.length];
+      useCategory(next.dataset.category);
+      next.focus();
+    });
   }
+  el("panel_toggle").addEventListener("click", () => {
+    const expanded = document.documentElement.classList.toggle("studio-immersive") === false;
+    el("panel_toggle").setAttribute("aria-expanded", String(expanded));
+    el("panel_toggle").setAttribute("aria-label", expanded ? "Collapse adjustments" : "Expand adjustments");
+  });
   el("mobile_notice_open").addEventListener("click", () => {
     el("mobile_notice_dialog").showModal();
   });
@@ -320,6 +502,43 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
   });
   el("close_library").addEventListener("click", () => libraryDialog.close());
   el("import_photo").addEventListener("click", () => el("files_picker").click());
+  el("backup_library").addEventListener("click", () => {
+    notify("Preparing a complete library ZIP, including originals and edits…");
+    submit(() => call("file.backupLibrary"));
+  });
+  el("share_backup").addEventListener("click", () => {
+    // Safari requires the share call directly within the user's tap.
+    backupHandoff.sharePrepared().catch(error => {
+      if (error?.name === "AbortError") {
+        notify("Sharing canceled. The backup is still ready; tap Save to Files again.");
+      } else {
+        notify(String(error?.message || error) + " You can also use Download backup.");
+      }
+    });
+  });
+  el("download_backup").addEventListener("click", () => {
+    try {
+      backupHandoff.downloadPrepared();
+    } catch (error) {
+      notify(String(error?.message || error));
+    }
+  });
+  el("restore_backup").addEventListener("click", () => {
+    if (!window.confirm("Restore a complete LightCraft backup ZIP? The existing library stays in storage, but the restored library becomes active.")) return;
+    el("restore_backup_picker").click();
+  });
+  el("restore_backup_picker").addEventListener("change", event => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".zip")) {
+      notify("Choose a LightCraft library backup ZIP.");
+      return;
+    }
+    // Rust verifies hashes before switching the active library pointer.
+    restoreBrowserBackupFile(file);
+    notify("Validating backup ZIP and restoring the local photo library…");
+  });
 
   // Call WASM during a native file input change, not inside a future command
   // turn: this retains a genuine user file-selection gesture on iOS.
@@ -355,12 +574,29 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
     await call("develop.auto");
     await refreshState();
   }));
-  el("export_photo").addEventListener("click", () => submit(() => call("dialog.export")));
+  el("export_photo").addEventListener("click", () => submit(async () => {
+    const photo = catalog.find(item => item.id === activeId);
+    if (!photo) throw new Error("Select a photograph before exporting.");
+    const stem = String(photo.fileName || "LightCraft")
+      .replace(/\.[^.]+$/, "")
+      .replace(/[^a-zA-Z0-9_-]+/g, "-")
+      .slice(0, 80) || "LightCraft";
+    // Use the real export encoder and the existing browser download service.
+    // Do not open the desktop egui export dialog in the mobile application.
+    await call("app.export", {
+      ids: [activeId],
+      path: stem + "-LightCraft.jpg",
+      format: "jpeg",
+      quality: 92
+    });
+    notify("Export prepared. Check your browser downloads or the Files app.");
+  }));
 
   (async () => {
     try {
       await waitForWasmReady();
       await refreshState();
+      checkStorageDurability().catch(() => {});
       root.hidden = false;
       loading.hidden = true;
       loading.style.display = "none";
