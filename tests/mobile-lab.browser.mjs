@@ -55,6 +55,21 @@ try {
   assert.equal(await page.locator("#mobile_studio").evaluate(el => el.hidden), false);
   await page.waitForFunction(() => !!globalThis.lightcraft?.command, { timeout: 30000 });
 
+  // Browser storage warnings must remain readable without the desktop
+  // egui toast becoming gigantic and covering the photograph.
+  const nativeNotice = page.locator("#mobile_notice");
+  await page.waitForTimeout(250);
+  if ((await page.locator("#mobile_notice_text").textContent())?.trim()) {
+    assert.ok(await nativeNotice.isVisible(), "engine warnings must be presented as a native mobile notice");
+    const warningHeight = await nativeNotice.evaluate(el => el.getBoundingClientRect().height);
+    assert.ok(warningHeight <= 56, "storage notice must be compact rather than cover the photo");
+    await page.locator("#mobile_notice_open").click();
+    assert.ok(await page.locator("#mobile_notice_dialog").evaluate(el => el.open));
+    assert.ok((await page.locator("#mobile_notice_text").textContent()).length > 20);
+    await page.locator("#mobile_notice_close").click();
+    assert.equal(await nativeNotice.isVisible(), false);
+  }
+
   // The photo viewer must have a nonzero, nonoverlapping layout in a phone viewport.
   const geometry = await page.evaluate(() => {
     const rect = id => {
@@ -75,6 +90,41 @@ try {
   assert.ok(geometry.photo.bottom <= geometry.footer.top + 2, "viewer must not overlap photo controls");
   assert.ok(geometry.controls.top >= geometry.footer.bottom, "editing controls must be below photo actions");
   assert.ok(geometry.console.bottom <= geometry.body.height + 1, "category nav must fit within phone screen");
+
+  // Screenshot the real WASM canvas and native controls across key compact
+  // viewport shapes. This catches landscape/iPad CSS rule collisions that a
+  // successful Rust build or a single portrait screenshot cannot detect.
+  for (const screen of [
+    { width: 375, height: 667, name: "iphone-small" },
+    { width: 852, height: 393, name: "iphone-landscape" },
+    { width: 820, height: 1180, name: "ipad-portrait" }
+  ]) {
+    await page.setViewportSize({ width: screen.width, height: screen.height });
+    const dimensions = await page.evaluate(() => {
+      const bounds = selector => {
+        const rect = document.querySelector(selector).getBoundingClientRect();
+        return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right, height: rect.height };
+      };
+      return {
+        viewportHeight: window.innerHeight,
+        header: bounds(".studio-header"),
+        canvas: bounds("#lightcraft_canvas"),
+        footer: bounds(".photo-footer"),
+        sheet: bounds(".edit-console"),
+        tabs: bounds("#category_tabs")
+      };
+    });
+    assert.ok(dimensions.canvas.height >= 120,
+      screen.name + ": photo must retain at least 120 points, got " + JSON.stringify(dimensions));
+    assert.ok(dimensions.canvas.bottom <= dimensions.footer.top + 2,
+      screen.name + ": photo must not be obscured by its footer");
+    assert.ok(dimensions.footer.bottom <= dimensions.sheet.top + 2,
+      screen.name + ": footer must not overlap editing sheet");
+    assert.ok(dimensions.tabs.bottom <= dimensions.viewportHeight + 2,
+      screen.name + ": correction categories must remain on-screen");
+    await page.screenshot({ path: reportDir + "/" + screen.name + ".png", fullPage: true });
+  }
+  await page.setViewportSize({ width: 393, height: 852 });
 
   const state = await page.evaluate(async () => JSON.parse(await lightcraft.command("library.state", "{}")));
   assert.ok(state && state.selection, "expected the real Rust library state");

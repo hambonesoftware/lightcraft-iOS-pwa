@@ -307,6 +307,13 @@ export function mountMobileStudio({ command, importBrowserFiles }) {
   for (const tab of tabs) {
     tab.addEventListener("click", () => useCategory(tab.dataset.category));
   }
+  el("mobile_notice_open").addEventListener("click", () => {
+    el("mobile_notice_dialog").showModal();
+  });
+  el("mobile_notice_close").addEventListener("click", () => {
+    el("mobile_notice_dialog").close();
+    el("mobile_notice").hidden = true;
+  });
   el("open_library").addEventListener("click", () => {
     renderLibrary();
     libraryDialog.showModal();

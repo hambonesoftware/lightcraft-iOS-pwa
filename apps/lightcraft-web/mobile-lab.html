@@ -17,6 +17,16 @@
   <div id="lightcraft_status" aria-live="polite" class="sr-only"></div>
 
   <div id="mobile_studio" hidden>
+    <div id="mobile_notice" class="mobile-notice" role="status" hidden>
+      <button id="mobile_notice_open" type="button" aria-haspopup="dialog">
+        <span aria-hidden="true">!</span> LightCraft notice · Details
+      </button>
+    </div>
+    <dialog id="mobile_notice_dialog" class="notice-dialog" aria-label="LightCraft notice details">
+      <h2>Important library notice</h2>
+      <p id="mobile_notice_text"></p>
+      <button id="mobile_notice_close" type="button">I understand</button>
+    </dialog>
     <header class="studio-header" aria-label="Photo editor toolbar">
       <button id="open_library" class="top-action" type="button" aria-label="Open photo library">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>

@@ -13,6 +13,8 @@
   --sheet-height: 298px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
   font: 15px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
 }
 * { box-sizing: border-box; }
@@ -35,10 +37,44 @@ button:disabled { opacity: .3; cursor: not-allowed; }
   touch-action: none; background: #191a1d;
 }
 #mobile_studio[hidden] { display: none; }
+.mobile-notice[hidden] { display: none; }
+.mobile-notice {
+  position: fixed; z-index: 8;
+  top: calc(var(--safe-top) + var(--header-height) + 8px);
+  left: calc(10px + var(--safe-left));
+  max-width: calc(100% - var(--safe-left) - var(--safe-right) - 20px);
+  border-radius: 14px; background: rgba(61, 49, 35, .94);
+  border: 1px solid rgba(230, 181, 130, .48);
+  box-shadow: 0 3px 18px rgba(0, 0, 0, .2);
+}
+.mobile-notice button {
+  display: flex; gap: 9px; align-items: center; border: 0; background: none;
+  color: #f4cfaa; min-height: 38px; padding: 7px 12px;
+  font-size: 12px; font-weight: 620; text-align: left;
+}
+.mobile-notice button span {
+  display: grid; place-items: center; flex: 0 0 auto;
+  width: 18px; height: 18px; border: 1px solid currentColor; border-radius: 50%;
+  font-size: 11px; font-weight: 760;
+}
+.notice-dialog {
+  width: min(390px, calc(100% - 32px)); max-height: min(75dvh, 480px);
+  border: 1px solid #56504b; border-radius: 18px;
+  background: #27272b; color: var(--text); padding: 22px;
+  box-shadow: 0 20px 70px rgba(0, 0, 0, .56); overflow-y: auto;
+}
+.notice-dialog::backdrop { background: rgba(0, 0, 0, .63); }
+.notice-dialog h2 { margin: 0 0 14px; font-size: 18px; font-weight: 680; }
+.notice-dialog p { white-space: pre-wrap; overflow-wrap: anywhere; color: #d6d4d0; font-size: 14px; line-height: 1.55; }
+.notice-dialog button {
+  background: var(--accent); border: 0; border-radius: 12px;
+  color: #1a1a1a; min-height: 44px; padding: 0 20px;
+  font-size: 13px; font-weight: 700;
+}
 .studio-header {
   z-index: 5; position: fixed; top: var(--safe-top); height: var(--header-height); left: 0; right: 0;
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 0 12px; background: rgba(30,31,35,.98); border-bottom: 1px solid var(--line);
+  padding: 0 calc(12px + var(--safe-right)) 0 calc(12px + var(--safe-left)); background: rgba(30,31,35,.98); border-bottom: 1px solid var(--line);
 }
 .top-action {
   display: inline-flex; align-items: center; gap: 1px; min-width: 69px; height: 44px;
@@ -54,7 +90,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .photo-footer {
   position: fixed; bottom: calc(var(--safe-bottom) + var(--sheet-height)); left: 0; right: 0; height: 34px;
   display: flex; align-items: center; gap: 10px; justify-content: space-between;
-  background: #1c1d21; padding: 0 15px; border-top: 1px solid var(--line);
+  background: #1c1d21; padding: 0 calc(15px + var(--safe-right)) 0 calc(15px + var(--safe-left)); border-top: 1px solid var(--line);
 }
 .photo-name { font-size: 11px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--muted); max-width: 53%; }
 .photo-actions { display: flex; gap: 11px; flex-shrink: 0; }
@@ -63,7 +99,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   z-index: 5; position: fixed; left: 0; right: 0; bottom: 0;
   height: calc(var(--sheet-height) + var(--safe-bottom)); background: var(--panel);
   border-top: 1px solid var(--line); border-radius: 17px 17px 0 0;
-  padding-bottom: var(--safe-bottom); display: flex; flex-direction: column;
+  padding-bottom: var(--safe-bottom); padding-left: var(--safe-left); padding-right: var(--safe-right); display: flex; flex-direction: column;
 }
 .grabber { height: 4px; width: 38px; background: #63676f; opacity: .45; border-radius: 3px; align-self: center; margin: 8px 0 6px; flex-shrink: 0; }
 .console-heading {
@@ -135,20 +171,25 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   .icon-action { width: 35px; }
   .console-heading { padding-left: 15px; padding-right: 15px; }
 }
-@media (max-height: 620px) {
-  :root { --sheet-height: 214px; --header-height: 48px; }
-  .brand { font-size: 10px; }
-  .console-heading { min-height: 42px; }
-  .control-row { min-height: 67px; }
-  .category-tabs, .category-tabs button { min-height: 49px; }
-}
-@media (min-width: 720px) {
+/* A narrow iPad window can use the wider sheet; a phone in landscape
+   must never inherit it merely because its viewport is over 720px wide. */
+@media (min-width: 720px) and (min-height: 621px) {
   :root { --sheet-height: 284px; }
-  .studio-header { padding: 0 28px; }
+  .studio-header { padding-left: calc(28px + var(--safe-left)); padding-right: calc(28px + var(--safe-right)); }
   .edit-console { left: 12%; right: 12%; border: 1px solid var(--line); border-bottom: 0; }
-  .photo-footer { padding: 0 28px; }
+  .photo-footer { padding-left: calc(28px + var(--safe-left)); padding-right: calc(28px + var(--safe-right)); }
   .category-tabs { justify-content: center; }
   .library-dialog { width: min(620px, 100%); margin: auto; left: 0; right: 0; }
+}
+@media (max-height: 620px) {
+  :root { --sheet-height: clamp(154px, 40dvh, 180px); --header-height: 48px; }
+  .brand { font-size: 10px; }
+  .grabber { margin: 4px 0 3px; }
+  .console-heading { min-height: 34px; padding-top: 0; padding-bottom: 3px; }
+  .console-heading h1 { font-size: 16px; }
+  .eyebrow { display: none; }
+  .control-row { min-height: 60px; }
+  .category-tabs, .category-tabs button { min-height: 46px; }
 }
 @media (prefers-reduced-motion: no-preference) {
   .category-tabs button, .auto-button { transition: color .15s ease, background .15s ease; }
