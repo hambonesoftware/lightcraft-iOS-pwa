@@ -15,6 +15,24 @@
 | Browser install | Upstream WebAssembly editor | iOS/iPadOS Home Screen PWA packaging, GitHub Pages deployment and offline app-shell caching |
 | Experimental alternative interface | Upstream Rust/egui image loupe and command bridge | [Mobile Studio](apps/lightcraft-web/mobile-lab.html) adds an HTML/CSS/JS touch frontend that **calls the original Rust/WASM engine**, not duplicate filters |
 
+### Save to Apple Photos from the LightCraft PWA
+
+The primary mobile workflow is **Import from Photos → edit using the original
+Rust engine → Save → Share to Photos → Save Image**. The Save button renders
+a full-resolution JPEG (quality 92) and commits it to a single **Saved photos**
+pool in on-device IndexedDB. After saving succeeds, a contextual menu shows
+**Share to Photos**, **Download image to Files**, or Done. The user selects
+**Save Image** from Apple's share sheet; the PWA cannot silently write into
+Photos or confirm that the user chose Save Image.
+
+Open **Photo library → Saved photos** to browse the flat newest-first pool,
+share an older finished export, or remove a local copy. Each exported JPEG
+remains independent of its source image and edit recipe. This local pool is
+still WebKit-managed data and can be deleted when browser or app website data
+is cleared. Copies explicitly saved to Apple Photos or Files are independent
+of this local pool. No Mac, Xcode, backend uploads, account, or SwiftData
+are required.
+
 ### Local-first PWA storage and independent backups
 
 Like [PlantIt](https://github.com/hambonesoftware/plantit), this PWA stores its working
