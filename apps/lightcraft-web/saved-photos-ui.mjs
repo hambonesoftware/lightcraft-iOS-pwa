@@ -8,6 +8,31 @@ import {
   shareSavedPhoto,
   downloadSavedPhoto
 } from "./saved-photos.mjs";
+/**
+ * A full-size 24 MP Rust export can peak above 1 GB. iOS Safari may kill the
+ * PWA without a catchable JavaScript error. The mobile Save default uses the
+ * engine's lower-memory 2048-pixel preview pipeline instead, without changing
+ * the original or its edit settings. No upscaling of smaller photographs.
+ */
+export const MOBILE_SAVE_MAX_EDGE = 2048;
+
+export function mobileSaveExportParams(photo, id) {
+  if (!Number.isSafeInteger(id) || id < 0) throw Error("Select a valid photo.");
+  const stem = String(photo?.fileName || "LightCraft")
+    .replace(/\.[^.]+$/, "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .slice(0, 80) || "LightCraft";
+  return {
+    ids: [id],
+    path: stem + "-LightCraft.jpg",
+    format: "jpeg",
+    quality: 90,
+    longEdge: MOBILE_SAVE_MAX_EDGE,
+    dontEnlarge: true,
+    colorSpace: "srgb"
+  };
+}
+
 
 export function mountSavedPhotosUI({ call, getSelectedPhoto, getSelectedId, notify, closeLibrary }) {
   const el = id => document.getElementById(id);
@@ -45,11 +70,16 @@ export function mountSavedPhotosUI({ call, getSelectedPhoto, getSelectedId, noti
     if (!full) throw Error("The saved photo could not be found.");
     if (poolDialog.open) poolDialog.close();
     if (previewUrl) URL.revokeObjectURL(previewUrl);
+    previewUrl = null;
     selected = full;
-    previewUrl = URL.createObjectURL(full.blob);
-    el("saved_photo_name").textContent = full.name;
-    el("saved_photo_preview").src = previewUrl;
-    el("saved_photo_preview").hidden = false;
+    // The photo is already visible in the editor. Decoding it a second time
+    // behind this dialog can double WebKit's image memory immediately after
+    // the Rust export has just peaked. Keep the share UI lightweight.
+    const preview = el("saved_photo_preview");
+    preview.removeAttribute("src");
+    preview.hidden = true;
+    el("saved_photo_name").textContent = full.name +
+      " · " + (full.size / (1024 * 1024)).toFixed(1) + " MB";
     if (!resultDialog.open) resultDialog.showModal();
   }
 
@@ -76,7 +106,7 @@ export function mountSavedPhotosUI({ call, getSelectedPhoto, getSelectedId, noti
     more.className = "backup-button";
     more.textContent = "Show more saved photos";
     function appendBatch() {
-      const batch = entries.slice(visible, visible + 20);
+      const batch = entries.slice(visible, visible + 8);
       visible += batch.length;
       for (const item of batch) {
         const row = document.createElement("div");
@@ -119,12 +149,19 @@ export function mountSavedPhotosUI({ call, getSelectedPhoto, getSelectedId, noti
 
         // Only the visible batch requests JPEG blobs. Database metadata is flat
         // and lightweight; thumbnail object URLs are revoked on dialog close.
-        repository.get(item.id).then(photo => {
-          if (!photo || generation !== poolGeneration || !poolDialog.open) return;
-          const url = URL.createObjectURL(photo.blob);
-          poolUrls.push(url);
-          thumbnail.src = url;
-        }).catch(error => console.warn("Could not load photo thumbnail", error));
+        // Large legacy exports can use hundreds of MB when the browser
+        // decodes their thumbnails. Keep them as text-only entries, still
+        // fully available for sharing without a second image decode.
+        if (item.size <= 3 * 1024 * 1024) {
+          repository.get(item.id).then(photo => {
+            if (!photo || generation !== poolGeneration || !poolDialog.open) return;
+            const url = URL.createObjectURL(photo.blob);
+            poolUrls.push(url);
+            thumbnail.src = url;
+          }).catch(error => console.warn("Could not load photo thumbnail", error));
+        } else {
+          thumbnail.replaceWith(document.createTextNode("JPG"));
+        }
       }
       more.hidden = visible >= entries.length;
       container.append(more);
@@ -137,22 +174,16 @@ export function mountSavedPhotosUI({ call, getSelectedPhoto, getSelectedId, noti
     const photo = getSelectedPhoto();
     const id = getSelectedId();
     if (!photo || id === null) throw Error("Select a photograph before saving.");
-    const stem = String(photo.fileName || "LightCraft")
-      .replace(/\.[^.]+$/, "")
-      .replace(/[^a-zA-Z0-9_-]+/g, "-")
-      .slice(0, 80) || "LightCraft";
+    const params = mobileSaveExportParams(photo, id);
     const saveButton = el("export_photo");
     saveButton.disabled = true;
-    notify("Rendering full-resolution edited JPEG…");
+    notify("Saving edited JPEG (up to 2048 px) for iPhone…");
     try {
       const saved = await workflow.saveThrough(async () => {
-        const response = await call("app.export", {
-          ids: [id],
-          path: stem + "-LightCraft.jpg",
-          format: "jpeg",
-          quality: 92
-        });
+        const response = await call("app.export", params);
         if (response?.error) throw Error(String(response.error));
+        const failedFile = response?.files?.find?.(file => file?.error);
+        if (failedFile) throw Error(String(failedFile.error));
       }, photo.fileName || "");
       await updateCount();
       await showResult(saved);
