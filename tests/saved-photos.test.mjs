@@ -7,6 +7,7 @@ import {
   downloadSavedPhoto
 } from "../apps/lightcraft-web/saved-photos.mjs";
 import { readFileSync } from "node:fs";
+import { MOBILE_SAVE_MAX_EDGE, mobileSaveExportParams } from "../apps/lightcraft-web/saved-photos-ui.mjs";
 
 const jpeg = new Blob([Uint8Array.of(0xff, 0xd8, 0xff, 0xdb, 0, 1, 2, 3)], { type: "image/jpeg" });
 const filename = "Sample-LightCraft.jpg";
@@ -30,6 +31,25 @@ function testRepository({ reject = false } = {}) {
     }
   };
 }
+
+test("mobile Save caps export pixels and preserves a full-resolution imported original", () => {
+  const original = { id: 52, fileName: "IMG_0976.DNG", width: 8064, height: 6048 };
+  const unchanged = { ...original };
+  const params = mobileSaveExportParams(original, original.id);
+  assert.deepEqual(params, {
+    ids: [52],
+    path: "IMG_0976-LightCraft.jpg",
+    format: "jpeg",
+    quality: 90,
+    longEdge: MOBILE_SAVE_MAX_EDGE,
+    dontEnlarge: true,
+    colorSpace: "srgb"
+  });
+  assert.equal(MOBILE_SAVE_MAX_EDGE, 2048);
+  assert.deepEqual(original, unchanged, "the original and its metadata must not change");
+  assert.equal(mobileSaveExportParams({ fileName: "small.jpg" }, 2).dontEnlarge, true);
+  assert.throws(() => mobileSaveExportParams(original, -1), /valid photo/);
+});
 
 test("filename validation permits finished images and strips paths", () => {
   assert.equal(safePhotoName("../photo.jpg"), "photo.jpg");
@@ -133,6 +153,9 @@ test("mobile shell references the real Rust export hook and does not create fake
   assert.match(ui, /workflow\.saveThrough/);
   assert.match(ui, /call\("app\.export"/);
   assert.match(ui, /format: "jpeg"/);
+  assert.match(ui, /longEdge: MOBILE_SAVE_MAX_EDGE/);
+  assert.match(ui, /dontEnlarge: true/);
+  assert.match(ui, /preview\.removeAttribute\("src"\)/);
   assert.match(ui, /shareSavedPhoto\(selected, navigator, File\)/);
   assert.match(html, /id="save_result_dialog"/);
   assert.match(html, /id="saved_pool_items"/);

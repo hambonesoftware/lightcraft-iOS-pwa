@@ -304,6 +304,79 @@ try {
   await page.locator("#save_result_dialog").waitFor({ state: "visible" });
   await page.screenshot({ path: reportDir + "/phone-save-to-photos.png", fullPage: true });
   await page.getByRole("button", { name: "Close saved photo menu" }).click();
+
+  // Reproduce the scenario tiny fixtures missed: saving a 12 MP photograph.
+  // WebKit can terminate a PWA during an uncapped full-size JPEG export, so
+  // this test verifies a real 4032 x 3024 source is encoded at <= 2048 px.
+  const largeName = "lightcraft-twelve-megapixel-ci.jpg";
+  const largeBytes = await page.evaluate(async () => {
+    const source = document.createElement("canvas");
+    source.width = 4032;
+    source.height = 3024;
+    const ctx = source.getContext("2d");
+    const gradient = ctx.createLinearGradient(0, 0, source.width, source.height);
+    gradient.addColorStop(0, "#23354f");
+    gradient.addColorStop(0.55, "#b78966");
+    gradient.addColorStop(1, "#eed3aa");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, source.width, source.height);
+    const blob = await new Promise(resolve => source.toBlob(resolve, "image/jpeg", 0.84));
+    return Array.from(new Uint8Array(await blob.arrayBuffer()));
+  });
+  await page.locator("#files_picker").setInputFiles({
+    name: largeName,
+    mimeType: "image/jpeg",
+    buffer: Buffer.from(largeBytes)
+  });
+  const largeReturnedId = await pollRust("catalog.query", { filter: {}, limit: 200 },
+    result => result.photos.find(photo => photo.fileName === largeName)?.id ?? false, 60000);
+  const largePhotoId = typeof largeReturnedId === "string" && /^[0-9]+$/.test(largeReturnedId)
+    ? Number(largeReturnedId) : largeReturnedId;
+  assert.ok(Number.isSafeInteger(largePhotoId), "large import must yield a real Rust catalog ID");
+  await page.getByRole("button", { name: "Open photo library" }).click();
+  const largeRow = page.locator(".library-item").filter({ hasText: largeName });
+  await largeRow.waitFor({ state: "visible", timeout: 20000 });
+  await largeRow.click();
+  await pollRust("library.state", {}, state => state.selection?.active === largePhotoId, 20000);
+  await page.getByRole("button", { name: "Save edited photo" }).click();
+  await page.locator("#save_result_dialog").waitFor({ state: "visible", timeout: 120000 });
+  const largeSaved = await page.evaluate(async name => {
+    const db = await new Promise((resolve, reject) => {
+      const req = indexedDB.open("lightcraft-finished-photos");
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    const entries = await new Promise((resolve, reject) => {
+      const req = db.transaction("items", "readonly").objectStore("items").getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    const entry = entries.find(item => item.name === name);
+    if (!entry) return null;
+    const image = await new Promise((resolve, reject) => {
+      const req = db.transaction("images", "readonly").objectStore("images").get(entry.id);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    const bitmap = await createImageBitmap(image.blob);
+    const result = {
+      width: bitmap.width,
+      height: bitmap.height,
+      size: image.blob.size,
+      noDuplicatePreview: document.getElementById("saved_photo_preview").hidden
+    };
+    bitmap.close();
+    return result;
+  }, "lightcraft-twelve-megapixel-ci-LightCraft.jpg");
+  assert.ok(largeSaved, "the 12 MP source must produce a saved JPEG");
+  assert.ok(largeSaved.width <= 2048 && largeSaved.height <= 2048,
+    "iPhone-safe output must not trigger a full-resolution render: " + JSON.stringify(largeSaved));
+  assert.ok(Math.max(largeSaved.width, largeSaved.height) >= 1600,
+    "large source should still yield a high-quality photographic export");
+  assert.ok(largeSaved.size > 100, "large photo output must contain real JPEG bytes");
+  assert.equal(largeSaved.noDuplicatePreview, true,
+    "the Save dialog must not decode a second large image on iOS");
+  await page.getByRole("button", { name: "Close saved photo menu" }).click();
   assert.deepEqual(errors, [], "browser page should not raise unhandled JavaScript errors");
   console.log("Mobile Studio browser smoke passed; screenshots in " + reportDir);
 } catch (error) {
