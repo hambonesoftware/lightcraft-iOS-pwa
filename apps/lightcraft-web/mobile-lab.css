@@ -423,3 +423,155 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   .photo-name { max-width: 29%; }
   .photo-actions { gap: 6px; }
 }
+
+
+/* Landscape workspace: photo and adjustments side by side.
+   Applies to landscape iPhone and iPad, without changing portrait layouts.
+   The image retains the complete space to the left of the inspector instead
+   of being squeezed above an enormous bottom sheet. */
+@media (orientation: landscape) and (min-width: 700px) {
+  :root {
+    --inspector-width: clamp(300px, 38vw, 500px);
+    --landscape-footer-height: 42px;
+  }
+
+  #lightcraft_viewport {
+    left: var(--safe-left);
+    right: calc(var(--inspector-width) + var(--safe-right));
+    top: calc(var(--safe-top) + var(--header-height));
+    bottom: calc(var(--safe-bottom) + var(--landscape-footer-height));
+  }
+
+  .photo-footer {
+    left: var(--safe-left);
+    right: calc(var(--inspector-width) + var(--safe-right));
+    bottom: var(--safe-bottom);
+    height: var(--landscape-footer-height);
+    padding: 0 clamp(12px, 2vw, 24px);
+  }
+
+  .photo-name { max-width: 35%; }
+  .photo-actions { gap: clamp(5px, 1vw, 14px); }
+
+  .edit-console {
+    left: auto;
+    right: calc(var(--safe-right) + 8px);
+    top: calc(var(--safe-top) + var(--header-height) + 8px);
+    bottom: calc(var(--safe-bottom) + 8px);
+    width: calc(var(--inspector-width) - 16px);
+    height: auto;
+    max-height: none;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    box-shadow: -8px 0 34px rgba(0, 0, 0, .16);
+    overflow: visible;
+  }
+
+  /* Keep the existing adjustment and category DOM, only change visual order. */
+  .category-tabs {
+    order: 1;
+    flex: 0 0 51px;
+    min-height: 51px;
+    justify-content: flex-start;
+    padding: 0 9px;
+    border-top: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 18px 18px 0 0;
+  }
+  .category-tabs button {
+    min-height: 49px;
+    padding: 0 12px;
+    font-size: 12px;
+  }
+  .category-tabs button[aria-selected="true"]::after {
+    left: 12px;
+    width: calc(100% - 24px);
+    bottom: 0;
+  }
+  .console-heading {
+    order: 2;
+    min-height: 75px;
+    padding: 13px 20px 10px;
+  }
+  .console-heading h1 { font-size: 22px; }
+  .console-heading .eyebrow { display: block; }
+  .adjustment-scroller {
+    order: 3;
+    min-height: 0;
+    flex: 1 1 auto;
+    padding: 4px 20px 20px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .control-row { min-height: 73px; padding: 6px 0 10px; }
+
+  /* Touch-friendly side handle; toggles the inspector to a narrow rail. */
+  .grabber-button {
+    position: absolute;
+    top: 50%;
+    left: -19px;
+    z-index: 7;
+    width: 19px;
+    height: 78px;
+    min-height: 78px;
+    flex: none;
+    padding: 0;
+    transform: translateY(-50%);
+    border: 1px solid var(--line);
+    border-right: 0;
+    border-radius: 12px 0 0 12px;
+    background: var(--panel);
+  }
+  .grabber-button .grabber {
+    height: 28px;
+    width: 4px;
+    margin: 0;
+    opacity: .75;
+  }
+
+  .mobile-notice {
+    max-width: calc(100% - var(--inspector-width) - var(--safe-left) - var(--safe-right) - 22px);
+  }
+  .toast {
+    right: calc(var(--inspector-width) + var(--safe-right) + 12px);
+    bottom: calc(var(--safe-bottom) + var(--landscape-footer-height) + 12px);
+  }
+
+  :root.studio-immersive { --inspector-width: 76px; }
+  .studio-immersive .category-tabs { display: none; }
+  .studio-immersive .edit-console {
+    align-items: center;
+  }
+  .studio-immersive .edit-console::after {
+    content: "EDIT";
+    display: block;
+    padding: 22px 0 0;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 740;
+    letter-spacing: .2em;
+    writing-mode: vertical-rl;
+    pointer-events: none;
+  }
+}
+
+/* Short iPhone landscape viewports still have accessible sliders and
+   horizontal category scrolling without pushing the photo off-screen. */
+@media (orientation: landscape) and (min-width: 700px) and (max-height: 480px) {
+  .edit-console {
+    top: calc(var(--safe-top) + var(--header-height) + 4px);
+    bottom: calc(var(--safe-bottom) + 4px);
+    border-radius: 12px;
+  }
+  .category-tabs {
+    flex-basis: 42px;
+    min-height: 42px;
+    border-radius: 12px 12px 0 0;
+  }
+  .category-tabs button { min-height: 40px; padding: 0 10px; font-size: 11px; }
+  .console-heading { min-height: 51px; padding: 7px 14px 6px; }
+  .console-heading h1 { font-size: 17px; }
+  .auto-button { min-height: 34px; padding: 5px 12px; }
+  .adjustment-scroller { padding: 0 14px 12px; }
+  .control-row { min-height: 65px; }
+}

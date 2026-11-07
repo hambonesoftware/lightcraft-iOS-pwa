@@ -91,37 +91,74 @@ try {
   assert.ok(geometry.controls.top >= geometry.footer.bottom, "editing controls must be below photo actions");
   assert.ok(geometry.console.bottom <= geometry.body.height + 1, "category nav must fit within phone screen");
 
-  // Screenshot the real WASM canvas and native controls across key compact
-  // viewport shapes. This catches landscape/iPad CSS rule collisions that a
-  // successful Rust build or a single portrait screenshot cannot detect.
+  // Capture real Rust/WASM layouts for iPhone and iPad in both orientations.
+  // Portrait uses a bottom sheet. Landscape must give the photo a dedicated
+  // left column and place scrollable editing tools on the right, with zero
+  // overlapping content or inaccessible category buttons.
   for (const screen of [
-    { width: 375, height: 667, name: "iphone-small" },
-    { width: 852, height: 393, name: "iphone-landscape" },
-    { width: 820, height: 1180, name: "ipad-portrait" }
+    { width: 375, height: 667, name: "iphone-small", split: false },
+    { width: 852, height: 393, name: "iphone-landscape", split: true },
+    { width: 820, height: 1180, name: "ipad-portrait", split: false },
+    { width: 1180, height: 820, name: "ipad-landscape", split: true }
   ]) {
     await page.setViewportSize({ width: screen.width, height: screen.height });
     const dimensions = await page.evaluate(() => {
       const bounds = selector => {
         const rect = document.querySelector(selector).getBoundingClientRect();
-        return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right, height: rect.height };
+        return {
+          top: rect.top, bottom: rect.bottom, left: rect.left,
+          right: rect.right, height: rect.height, width: rect.width
+        };
       };
       return {
         viewportHeight: window.innerHeight,
-        header: bounds(".studio-header"),
+        viewportWidth: window.innerWidth,
         canvas: bounds("#lightcraft_canvas"),
         footer: bounds(".photo-footer"),
         sheet: bounds(".edit-console"),
-        tabs: bounds("#category_tabs")
+        tabs: bounds("#category_tabs"),
+        controls: bounds("#adjustment_controls")
       };
     });
     assert.ok(dimensions.canvas.height >= 120,
       screen.name + ": photo must retain at least 120 points, got " + JSON.stringify(dimensions));
     assert.ok(dimensions.canvas.bottom <= dimensions.footer.top + 2,
       screen.name + ": photo must not be obscured by its footer");
-    assert.ok(dimensions.footer.bottom <= dimensions.sheet.top + 2,
-      screen.name + ": footer must not overlap editing sheet");
     assert.ok(dimensions.tabs.bottom <= dimensions.viewportHeight + 2,
       screen.name + ": correction categories must remain on-screen");
+
+    if (screen.split) {
+      assert.ok(dimensions.canvas.width >= 320,
+        screen.name + ": photo must remain a useful width next to inspector");
+      assert.ok(dimensions.sheet.width >= 280,
+        screen.name + ": right inspector must have usable controls");
+      assert.ok(dimensions.canvas.right <= dimensions.sheet.left + 2,
+        screen.name + ": the photo and side inspector must not overlap");
+      assert.ok(dimensions.footer.right <= dimensions.sheet.left + 2,
+        screen.name + ": footer must stay below photo, not underneath inspector");
+      assert.ok(dimensions.tabs.top < dimensions.controls.top,
+        screen.name + ": editing categories must move to top of inspector");
+      assert.ok(dimensions.controls.bottom <= dimensions.sheet.bottom + 2,
+        screen.name + ": scrolling controls must remain inside inspector");
+
+      const expandedRight = dimensions.canvas.right;
+      await page.getByRole("button", { name: "Collapse adjustments" }).click();
+      const collapsedRight = await page.locator("#lightcraft_canvas")
+        .evaluate(el => el.getBoundingClientRect().right);
+      assert.ok(collapsedRight > expandedRight + 150,
+        screen.name + ": collapsing side inspector must expand photo space");
+      await page.getByRole("button", { name: "Expand adjustments" }).click();
+      const restoredRight = await page.locator("#lightcraft_canvas")
+        .evaluate(el => el.getBoundingClientRect().right);
+      assert.ok(Math.abs(restoredRight - expandedRight) <= 2,
+        screen.name + ": reopening the side inspector restores layout");
+    } else {
+      assert.ok(dimensions.footer.bottom <= dimensions.sheet.top + 2,
+        screen.name + ": portrait editor must remain below photo actions");
+      assert.ok(dimensions.controls.top >= dimensions.footer.bottom,
+        screen.name + ": portrait adjustment controls must stay below photo");
+    }
+
     await page.screenshot({ path: reportDir + "/" + screen.name + ".png", fullPage: true });
   }
   await page.setViewportSize({ width: 393, height: 852 });
