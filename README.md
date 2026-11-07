@@ -18,9 +18,14 @@
 ### Save to Apple Photos from the LightCraft PWA
 
 The primary mobile workflow is **Import from Photos → edit using the original
-Rust engine → Save → Share to Photos → Save Image**. The Save button renders
-a full-resolution JPEG (quality 92) and commits it to a single **Saved photos**
-pool in on-device IndexedDB. After saving succeeds, a contextual menu shows
+Rust engine → Save → Share to Photos → Save Image**. On iPhone the Save button
+renders a high-quality JPEG (quality 90, long edge at most **2048 pixels**,
+never upscaled) and commits it to a single **Saved photos** pool in on-device
+IndexedDB. This is deliberate: an uncapped 24 MP export can use about 1.2 GB
+of peak working memory and can terminate a WebKit PWA without an error.
+The cap lets the Rust engine render from its lower-memory preview source.
+The full-resolution imported original and its non-destructive edits remain
+unchanged in the LightCraft library. After saving succeeds, a contextual menu shows
 **Share to Photos**, **Download image to Files**, or Done. The user selects
 **Save Image** from Apple's share sheet; the PWA cannot silently write into
 Photos or confirm that the user chose Save Image.
