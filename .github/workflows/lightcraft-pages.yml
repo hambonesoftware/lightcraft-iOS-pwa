@@ -105,6 +105,22 @@ jobs:
           path: target/mobile-lab-screenshots/
           if-no-files-found: ignore
 
+      # GitHub Pages serves the original static files, not the web dev server's
+      # .gz/.br sidecars. Don't upload redundant WASM copies (about 16 MB):
+      # smaller Pages artifacts synchronize faster and avoid deployment timeouts.
+      - name: Remove redundant precompressed Pages copies
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          SITE=target/web-site
+          find "$SITE" -maxdepth 1 -type f \( -name '*.gz' -o -name '*.br' \) -delete
+          test -s "$SITE/lightcraft_web_bg.wasm"
+          test -s "$SITE/lightcraft_web.js"
+          test -s "$SITE/mobile-lab.css"
+          test -s "$SITE/sw.js"
+          du -sh "$SITE"
+
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v4
@@ -132,4 +148,4 @@ jobs:
           # Pages file synchronization sometimes exceeds the default 10-minute
           # limit even when the WASM artifact has built and uploaded correctly.
           # Allow more time instead of cancelling a healthy upload mid-sync.
-          timeout: 1200000
+          timeout: 2400000
