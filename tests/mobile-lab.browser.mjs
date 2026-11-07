@@ -97,6 +97,8 @@ try {
   // overlapping content or inaccessible category buttons.
   for (const screen of [
     { width: 375, height: 667, name: "iphone-small", split: false },
+    { width: 568, height: 320, name: "iphone-compact-landscape", split: true, inspectorMin: 200 },
+    { width: 667, height: 375, name: "iphone-se-landscape", split: true, inspectorMin: 220 },
     { width: 852, height: 393, name: "iphone-landscape", split: true },
     { width: 820, height: 1180, name: "ipad-portrait", split: false },
     { width: 1180, height: 820, name: "ipad-landscape", split: true }
@@ -130,7 +132,7 @@ try {
     if (screen.split) {
       assert.ok(dimensions.canvas.width >= 320,
         screen.name + ": photo must remain a useful width next to inspector");
-      assert.ok(dimensions.sheet.width >= 280,
+      assert.ok(dimensions.sheet.width >= (screen.inspectorMin ?? 280),
         screen.name + ": right inspector must have usable controls");
       assert.ok(dimensions.canvas.right <= dimensions.sheet.left + 2,
         screen.name + ": the photo and side inspector must not overlap");

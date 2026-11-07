@@ -143,8 +143,8 @@ test("PWA prepares a full Rust ZIP but requires separate user Save to Files acti
 
 test("landscape iPhone and iPad use a side-by-side photo and inspector", () => {
   const browserTest = readFileSync(new URL("./mobile-lab.browser.mjs", import.meta.url), "utf8");
-  assert.match(css, /@media \(orientation: landscape\) and \(min-width: 700px\)/);
-  assert.match(css, /--inspector-width: clamp\(300px, 38vw, 500px\)/);
+  assert.match(css, /@media \(orientation: landscape\) and \(min-width: 560px\)/);
+  assert.match(css, /--inspector-width: clamp\(230px, 38vw, 500px\)/);
   assert.match(css, /#lightcraft_viewport\s*\{\s*left: var\(--safe-left\);\s*right: calc\(var\(--inspector-width\)/);
   assert.match(css, /\.photo-footer\s*\{\s*left: var\(--safe-left\);\s*right: calc\(var\(--inspector-width\)/);
   assert.match(css, /\.category-tabs\s*\{\s*order: 1;/);
@@ -152,6 +152,11 @@ test("landscape iPhone and iPad use a side-by-side photo and inspector", () => {
   assert.match(css, /\.adjustment-scroller\s*\{\s*order: 3;/);
   assert.match(css, /:root\.studio-immersive \{ --inspector-width: 76px; \}/);
   assert.match(css, /@media \(orientation: landscape\) and \(min-width: 700px\) and \(max-height: 480px\)/);
+  assert.match(browserTest, /name: "iphone-compact-landscape", split: true/);
+  assert.match(browserTest, /name: "iphone-se-landscape", split: true/);
+  assert.match(css, /max-width: 699px/);
+  assert.match(css, /studio-immersive \.grabber-button::after/);
+  assert.match(browserTest, /inspectorMin \?\? 280/);
   assert.match(browserTest, /name: "ipad-landscape", split: true/);
   assert.match(browserTest, /name: "ipad-portrait", split: false/);
 });
