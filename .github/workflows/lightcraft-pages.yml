@@ -128,3 +128,8 @@ jobs:
       - name: Deploy the PWA
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          # Pages file synchronization sometimes exceeds the default 10-minute
+          # limit even when the WASM artifact has built and uploaded correctly.
+          # Allow more time instead of cancelling a healthy upload mid-sync.
+          timeout: 1200000
