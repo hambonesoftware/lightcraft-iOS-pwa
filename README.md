@@ -3,6 +3,8 @@
 >
 > **Original source:** [storytold/lightcraft](https://github.com/storytold/lightcraft) · **Original website:** [getartcraft.com/apps/lightcraft](https://getartcraft.com/apps/lightcraft) · **This fork:** [hambonesoftware/lightcraft-iOS-pwa](https://github.com/hambonesoftware/lightcraft-iOS-pwa)
 
+**Launch the live mobile app:** [Open LightCraft Local on GitHub Pages](https://hambonesoftware.github.io/lightcraft-iOS-pwa/) — installable on iPhone and iPad from Safari using **Share → Add to Home Screen**.
+
 ## LightCraft Local — same engine, mobile-first frontend
 
 **Original LightCraft image engine. A new mobile-first way to use it.** This fork retains the upstream **Rust/WebAssembly non-destructive photo processing, rendering, existing catalog, presets and editing commands**. The focus of this fork is the **interface**: iPhone/iPad-friendly navigation, touch-sized controls, compact correction categories, a photo-first workspace, presets, and installable PWA support. It is not a separate photo engine or a ground-up rewrite.
