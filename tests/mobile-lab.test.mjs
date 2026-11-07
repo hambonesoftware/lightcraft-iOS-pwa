@@ -151,7 +151,7 @@ test("landscape iPhone and iPad use a side-by-side photo and inspector", () => {
   assert.match(css, /\.console-heading\s*\{\s*order: 2;/);
   assert.match(css, /\.adjustment-scroller\s*\{\s*order: 3;/);
   assert.match(css, /:root\.studio-immersive \{ --inspector-width: 76px; \}/);
-  assert.match(css, /@media \(orientation: landscape\) and \(min-width: 700px\) and \(max-height: 480px\)/);
+  assert.match(css, /@media \(orientation: landscape\) and \(min-width: 560px\) and \(max-height: 480px\)/);
   assert.match(browserTest, /name: "iphone-compact-landscape", split: true/);
   assert.match(browserTest, /name: "iphone-se-landscape", split: true/);
   assert.match(css, /max-width: 699px/);
