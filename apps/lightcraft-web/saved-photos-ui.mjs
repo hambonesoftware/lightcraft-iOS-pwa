@@ -78,8 +78,7 @@ export function mountSavedPhotosUI({ call, getSelectedPhoto, getSelectedId, noti
     const preview = el("saved_photo_preview");
     preview.removeAttribute("src");
     preview.hidden = true;
-    el("saved_photo_name").textContent = full.name +
-      " · " + (full.size / (1024 * 1024)).toFixed(1) + " MB";
+    el("saved_photo_name").textContent = full.name;
     if (!resultDialog.open) resultDialog.showModal();
   }
 
