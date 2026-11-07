@@ -140,3 +140,18 @@ test("PWA prepares a full Rust ZIP but requires separate user Save to Files acti
   assert.match(sw, /"\.\/backup-files\.mjs"/);
   assert.match(css, /\.backup-ready\[hidden\]/);
 });
+
+test("landscape iPhone and iPad use a side-by-side photo and inspector", () => {
+  const browserTest = readFileSync(new URL("./mobile-lab.browser.mjs", import.meta.url), "utf8");
+  assert.match(css, /@media \(orientation: landscape\) and \(min-width: 700px\)/);
+  assert.match(css, /--inspector-width: clamp\(300px, 38vw, 500px\)/);
+  assert.match(css, /#lightcraft_viewport\s*\{\s*left: var\(--safe-left\);\s*right: calc\(var\(--inspector-width\)/);
+  assert.match(css, /\.photo-footer\s*\{\s*left: var\(--safe-left\);\s*right: calc\(var\(--inspector-width\)/);
+  assert.match(css, /\.category-tabs\s*\{\s*order: 1;/);
+  assert.match(css, /\.console-heading\s*\{\s*order: 2;/);
+  assert.match(css, /\.adjustment-scroller\s*\{\s*order: 3;/);
+  assert.match(css, /:root\.studio-immersive \{ --inspector-width: 76px; \}/);
+  assert.match(css, /@media \(orientation: landscape\) and \(min-width: 700px\) and \(max-height: 480px\)/);
+  assert.match(browserTest, /name: "ipad-landscape", split: true/);
+  assert.match(browserTest, /name: "ipad-portrait", split: false/);
+});
