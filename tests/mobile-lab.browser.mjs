@@ -328,8 +328,11 @@ try {
     mimeType: "image/jpeg",
     buffer: Buffer.from(largeBytes)
   });
-  const largePhotoId = await pollRust("catalog.query", { filter: {}, limit: 200 },
+  const largeReturnedId = await pollRust("catalog.query", { filter: {}, limit: 200 },
     result => result.photos.find(photo => photo.fileName === largeName)?.id ?? false, 60000);
+  const largePhotoId = typeof largeReturnedId === "string" && /^[0-9]+$/.test(largeReturnedId)
+    ? Number(largeReturnedId) : largeReturnedId;
+  assert.ok(Number.isSafeInteger(largePhotoId), "large import must yield a real Rust catalog ID");
   await page.getByRole("button", { name: "Open photo library" }).click();
   const largeRow = page.locator(".library-item").filter({ hasText: largeName });
   await largeRow.waitFor({ state: "visible", timeout: 20000 });
